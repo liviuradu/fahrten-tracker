@@ -1,5 +1,5 @@
 // sw.js – App-Hülle offline verfügbar machen
-const CACHE = "ft-v3";
+const CACHE = "ft-v4";
 const SHELL = [
   "./",
   "./index.html",
