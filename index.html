@@ -20,6 +20,8 @@
   input { width:100%; padding:14px; font-size:17px; border-radius:12px; border:1px solid var(--line);
           background:#0b1220; color:var(--txt); }
   input:focus { outline:2px solid var(--amber); border-color:var(--amber); }
+  .langsel { padding:8px 12px; border-radius:10px; background:var(--card); color:var(--txt);
+             border:1px solid var(--line); font-size:14px; }
   .btn { width:100%; padding:16px; font-size:17px; font-weight:600; border:none; border-radius:14px;
          cursor:pointer; margin-top:16px; }
   .btn-primary { background:var(--amber); color:#1a1206; }
@@ -42,6 +44,8 @@
   #reader { width:100%; border-radius:14px; overflow:hidden; }
   .overlay { position:fixed; inset:0; background:#000; z-index:20; display:none; flex-direction:column; padding:16px; }
   .overlay.active { display:flex; }
+  #undoBar { display:none; position:fixed; left:16px; right:16px; bottom:76px; max-width:488px; margin:0 auto;
+             background:var(--card); color:var(--txt); border:1px solid var(--amber); z-index:25; }
   .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--ok);
            color:#04120c; padding:12px 18px; border-radius:12px; font-weight:600; z-index:30; opacity:0;
            transition:opacity .2s; max-width:90%; }
@@ -57,9 +61,10 @@
 
 <!-- 1) Login -->
 <section id="v-login" class="view active">
+  <div style="text-align:right; margin-bottom:6px;"><select id="langSel" class="langsel"></select></div>
   <h1>Fahrten-Tracker</h1>
-  <p class="sub">Anmeldung</p>
-  <label for="pw">Passwort</label>
+  <p class="sub" id="t_loginSub">Anmeldung</p>
+  <label for="pw" id="t_pwLabel">Passwort</label>
   <input id="pw" type="password" autocomplete="current-password" inputmode="text">
   <button id="loginBtn" class="btn btn-primary">Einloggen</button>
   <p id="loginErr" class="sub" style="color:var(--warn); display:none;">Falsches Passwort.</p>
@@ -67,9 +72,9 @@
 
 <!-- 2) Kennzeichen -->
 <section id="v-plate" class="view">
-  <h1>Kennzeichen</h1>
-  <p class="sub">Pflichtfeld – bitte das Kennzeichen dieses LKW eingeben.</p>
-  <label for="plate">Kennzeichen</label>
+  <h1 id="t_plateH">Kennzeichen</h1>
+  <p class="sub" id="t_plateSub">Pflichtfeld – bitte das Kennzeichen dieses LKW eingeben.</p>
+  <label for="plate" id="t_plateLabel">Kennzeichen</label>
   <input id="plate" type="text" autocapitalize="characters" autocomplete="off" placeholder="z. B. MEK-AB 123">
   <button id="plateBtn" class="btn btn-primary" disabled>Weiter</button>
 </section>
@@ -86,11 +91,12 @@
     <div id="manualBox" style="display:none;">
       <div class="grid2" id="stationBtns"></div>
     </div>
-    <h3 style="margin:22px 0 4px; font-size:15px;">Heute erfasst (<span id="cnt">0</span>)</h3>
+    <h3 style="margin:22px 0 4px; font-size:15px;"><span id="t_todayHdr">Heute erfasst</span> (<span id="cnt">0</span>)</h3>
     <div id="scanList"></div>
     <button id="exportBtn" class="btn btn-ghost" style="margin-top:22px;">💾 Daten sichern (Export)</button>
     <button id="changePlate" class="btn btn-ghost">Kennzeichen ändern</button>
     <button id="logoutBtn" class="btn btn-ghost">Abmelden</button>
+    <div style="text-align:center; margin-top:16px;"><select id="langSel2" class="langsel"></select></div>
     <p class="muted" id="cfgWarn"></p>
   </div>
 </section>
@@ -101,48 +107,67 @@
   <button id="closeScan" class="btn btn-ghost" style="color:#fff; border-color:#fff;">Abbrechen</button>
 </div>
 
-<!-- QR-Codes zum Drucken (Aufruf: dateiname.html#qr) -->
+<!-- QR-Codes zum Drucken (Aufruf: dateiname.html#qr) – bewusst nur Deutsch -->
 <section id="v-qr" class="view">
   <h1>QR-Codes zum Ausdrucken</h1>
   <p class="sub">Je Station einmal ausdrucken und vor Ort anbringen. „Boden abkippen" ist EIN Code – Nesselröden vs. Baustelle entscheidet das GPS.</p>
   <div class="qrcards" id="qrCards"></div>
 </section>
 
+<button id="undoBar" class="btn btn-ghost"></button>
 <div id="toast" class="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 /* ============================================================
-   KONFIGURATION  – hier trägst du deine Werte ein
+   KONFIGURATION
    ============================================================ */
 const CONFIG = {
-  // Privates GitHub-Repo für die Scan-Daten:
   GITHUB_OWNER : "liviuradu",
   GITHUB_REPO  : "fahrten-tracker-daten",
   GITHUB_BRANCH: "main",
   // Kein Token im Code! Einrichtung pro Gerät über Setup-Link:
   //   https://liviuradu.github.io/fahrten-tracker/#setup=DEIN_TOKEN
   SCAN_DIR     : "scans",
-
-  // Passwörter, die ihr den Fahrern gebt (mehrere möglich):
   PASSWORDS    : ["baustelle2026"],
-
-  // Geofence Nesselröden: entscheidet bei "Boden abkippen" Deponie vs. Baustelle
   NESSELROEDEN : { lat: 51.3402, lng: 10.0021, radiusMeter: 800 },
 };
 
+/* ============================================================
+   SPRACHEN
+   ============================================================ */
+const LANGS = { de:"Deutsch", en:"English", ro:"Română", sr:"Srpski", hu:"Magyar",
+                pl:"Polski", es:"Español", it:"Italiano", sq:"Shqip", uk:"Українська" };
+
+const I18N = {
+de:{loginSub:"Anmeldung",pwLabel:"Passwort",loginBtn:"Einloggen",wrongPw:"Falsches Passwort.",plateH:"Kennzeichen",plateSub:"Pflichtfeld – bitte das Kennzeichen dieses LKW eingeben.",plateBtn:"Weiter",scanBtn:"📷 QR-Code scannen",manualBtn:"Ohne Kamera erfassen",todayHdr:"Heute erfasst",exportBtn:"💾 Daten sichern (Export)",changePlateBtn:"Kennzeichen ändern",logoutBtn:"Abmelden",cancelBtn:"Abbrechen",online:"Online",offline:"Kein Netz",notSetup:"⚠ Gerät noch nicht eingerichtet – bitte den Setup-Link vom Bauleiter öffnen. Scans werden bis dahin nur lokal gespeichert.",uploadRejected:"⚠ Upload abgelehnt – bitte dem Bauleiter melden. Scans bleiben lokal gespeichert.",nothingYet:"Noch nichts erfasst.",gpsMissing:"kein GPS",noGps:"Kein GPS-Signal – trotzdem gespeichert",scanned:"Erfasst: ",unknownQr:"Unbekannter QR-Code",noCamera:"Kamera nicht verfügbar – nutze «Ohne Kamera erfassen»",noData:"Keine Daten vorhanden",exportDone:"Export erstellt",setupSaved:"Einrichtung gespeichert ✓",dupConfirm:"Das wurde gerade schon gescannt. Wirklich noch einmal?",seqConfirm:"Achtung: Vorher wurde kein Laden gescannt. Trotzdem speichern?",undoBtn:"↩ Letzten Scan löschen",undoneToast:"Gelöscht",st_SAND_LADEN:"Sand laden",st_SAND_KIPPEN:"Sand abkippen",st_BODEN_LADEN:"Boden laden",st_BODEN_KIPPEN:"Boden abkippen",st_BODEN_NESSEL:"Boden abkippen",st_BODEN_INTERN:"Boden abkippen",site:"Baustelle",gpsDecides:"(GPS entscheidet)",siteOther:"Baustelle · andere Stelle"},
+en:{loginSub:"Login",pwLabel:"Password",loginBtn:"Log in",wrongPw:"Wrong password.",plateH:"License plate",plateSub:"Required – enter this truck's license plate.",plateBtn:"Continue",scanBtn:"📷 Scan QR code",manualBtn:"Without camera",todayHdr:"Recorded today",exportBtn:"💾 Save data (export)",changePlateBtn:"Change plate",logoutBtn:"Log out",cancelBtn:"Cancel",online:"Online",offline:"No internet",notSetup:"⚠ Phone not set up yet – open the setup link from the site manager. Until then, data is saved only on this phone.",uploadRejected:"⚠ Upload rejected – tell the site manager. Data stays saved on this phone.",nothingYet:"Nothing recorded yet.",gpsMissing:"no GPS",noGps:"No GPS signal – saved anyway",scanned:"Recorded: ",unknownQr:"Unknown QR code",noCamera:"Camera not working – use «Without camera»",noData:"No data",exportDone:"Export created",setupSaved:"Setup saved ✓",dupConfirm:"You just scanned this. Really scan again?",seqConfirm:"Warning: no loading was scanned before this. Save anyway?",undoBtn:"↩ Delete last scan",undoneToast:"Deleted",st_SAND_LADEN:"Load sand",st_SAND_KIPPEN:"Unload sand",st_BODEN_LADEN:"Load soil",st_BODEN_KIPPEN:"Unload soil",st_BODEN_NESSEL:"Unload soil",st_BODEN_INTERN:"Unload soil",site:"Site",gpsDecides:"(GPS decides)",siteOther:"Site · other spot"},
+ro:{loginSub:"Autentificare",pwLabel:"Parolă",loginBtn:"Intră",wrongPw:"Parolă greșită.",plateH:"Număr de înmatriculare",plateSub:"Obligatoriu – scrie numărul acestui camion.",plateBtn:"Mai departe",scanBtn:"📷 Scanează codul QR",manualBtn:"Fără cameră",todayHdr:"Înregistrat azi",exportBtn:"💾 Salvează datele (export)",changePlateBtn:"Schimbă numărul",logoutBtn:"Ieșire",cancelBtn:"Anulează",online:"Online",offline:"Fără internet",notSetup:"⚠ Telefonul nu e configurat – deschide linkul primit de la șeful de șantier. Până atunci datele se salvează doar pe telefon.",uploadRejected:"⚠ Trimiterea a fost refuzată – anunță șeful de șantier. Datele rămân salvate pe telefon.",nothingYet:"Nimic înregistrat încă.",gpsMissing:"fără GPS",noGps:"Fără semnal GPS – salvat oricum",scanned:"Înregistrat: ",unknownQr:"Cod QR necunoscut",noCamera:"Camera nu merge – folosește «Fără cameră»",noData:"Nu există date",exportDone:"Export creat",setupSaved:"Configurare salvată ✓",dupConfirm:"Ai scanat asta chiar acum. Sigur încă o dată?",seqConfirm:"Atenție: înainte nu ai scanat încărcarea. Salvezi oricum?",undoBtn:"↩ Șterge ultima scanare",undoneToast:"Șters",st_SAND_LADEN:"Încărcare nisip",st_SAND_KIPPEN:"Descărcare nisip",st_BODEN_LADEN:"Încărcare pământ",st_BODEN_KIPPEN:"Descărcare pământ",st_BODEN_NESSEL:"Descărcare pământ",st_BODEN_INTERN:"Descărcare pământ",site:"Șantier",gpsDecides:"(decide GPS-ul)",siteOther:"Șantier · alt loc"},
+sr:{loginSub:"Prijava",pwLabel:"Lozinka",loginBtn:"Prijavi se",wrongPw:"Pogrešna lozinka.",plateH:"Registarska oznaka",plateSub:"Obavezno – upiši registraciju ovog kamiona.",plateBtn:"Dalje",scanBtn:"📷 Skeniraj QR kod",manualBtn:"Bez kamere",todayHdr:"Danas zabeleženo",exportBtn:"💾 Sačuvaj podatke (eksport)",changePlateBtn:"Promeni registraciju",logoutBtn:"Odjava",cancelBtn:"Otkaži",online:"Na mreži",offline:"Nema interneta",notSetup:"⚠ Telefon nije podešen – otvori link od šefa gradilišta. Do tada se podaci čuvaju samo na telefonu.",uploadRejected:"⚠ Slanje odbijeno – javi šefu gradilišta. Podaci ostaju sačuvani na telefonu.",nothingYet:"Još ništa nije zabeleženo.",gpsMissing:"nema GPS",noGps:"Nema GPS signala – ipak sačuvano",scanned:"Zabeleženo: ",unknownQr:"Nepoznat QR kod",noCamera:"Kamera ne radi – koristi «Bez kamere»",noData:"Nema podataka",exportDone:"Eksport napravljen",setupSaved:"Podešavanje sačuvano ✓",dupConfirm:"Ovo si upravo skenirao. Stvarno još jednom?",seqConfirm:"Pažnja: pre ovoga nije skeniran utovar. Ipak sačuvati?",undoBtn:"↩ Obriši poslednji sken",undoneToast:"Obrisano",st_SAND_LADEN:"Utovar peska",st_SAND_KIPPEN:"Istovar peska",st_BODEN_LADEN:"Utovar zemlje",st_BODEN_KIPPEN:"Istovar zemlje",st_BODEN_NESSEL:"Istovar zemlje",st_BODEN_INTERN:"Istovar zemlje",site:"Gradilište",gpsDecides:"(GPS odlučuje)",siteOther:"Gradilište · drugo mesto"},
+hu:{loginSub:"Bejelentkezés",pwLabel:"Jelszó",loginBtn:"Belépés",wrongPw:"Hibás jelszó.",plateH:"Rendszám",plateSub:"Kötelező – írd be a teherautó rendszámát.",plateBtn:"Tovább",scanBtn:"📷 QR-kód beolvasása",manualBtn:"Kamera nélkül",todayHdr:"Ma rögzítve",exportBtn:"💾 Adatok mentése (export)",changePlateBtn:"Rendszám módosítása",logoutBtn:"Kijelentkezés",cancelBtn:"Mégse",online:"Online",offline:"Nincs internet",notSetup:"⚠ A telefon nincs beállítva – nyisd meg a művezetőtől kapott linket. Addig az adatok csak a telefonon tárolódnak.",uploadRejected:"⚠ A küldés sikertelen – szólj a művezetőnek. Az adatok a telefonon megmaradnak.",nothingYet:"Még nincs rögzítés.",gpsMissing:"nincs GPS",noGps:"Nincs GPS-jel – akkor is elmentve",scanned:"Rögzítve: ",unknownQr:"Ismeretlen QR-kód",noCamera:"A kamera nem működik – használd a «Kamera nélkül» gombot",noData:"Nincs adat",exportDone:"Export kész",setupSaved:"Beállítás elmentve ✓",dupConfirm:"Ezt épp most olvastad be. Biztos még egyszer?",seqConfirm:"Figyelem: előtte nem volt rakodás beolvasva. Mégis mentsem?",undoBtn:"↩ Utolsó beolvasás törlése",undoneToast:"Törölve",st_SAND_LADEN:"Homok felrakása",st_SAND_KIPPEN:"Homok lerakása",st_BODEN_LADEN:"Föld felrakása",st_BODEN_KIPPEN:"Föld lerakása",st_BODEN_NESSEL:"Föld lerakása",st_BODEN_INTERN:"Föld lerakása",site:"Építkezés",gpsDecides:"(a GPS dönti el)",siteOther:"Építkezés · más hely"},
+pl:{loginSub:"Logowanie",pwLabel:"Hasło",loginBtn:"Zaloguj",wrongPw:"Złe hasło.",plateH:"Numer rejestracyjny",plateSub:"Obowiązkowe – wpisz rejestrację tej ciężarówki.",plateBtn:"Dalej",scanBtn:"📷 Skanuj kod QR",manualBtn:"Bez kamery",todayHdr:"Dziś zapisane",exportBtn:"💾 Zapisz dane (eksport)",changePlateBtn:"Zmień rejestrację",logoutBtn:"Wyloguj",cancelBtn:"Anuluj",online:"Online",offline:"Brak internetu",notSetup:"⚠ Telefon nie jest skonfigurowany – otwórz link od kierownika budowy. Do tego czasu dane zapisują się tylko w telefonie.",uploadRejected:"⚠ Wysyłanie odrzucone – powiedz kierownikowi budowy. Dane zostają zapisane w telefonie.",nothingYet:"Jeszcze nic nie zapisano.",gpsMissing:"brak GPS",noGps:"Brak sygnału GPS – i tak zapisano",scanned:"Zapisano: ",unknownQr:"Nieznany kod QR",noCamera:"Kamera nie działa – użyj «Bez kamery»",noData:"Brak danych",exportDone:"Eksport gotowy",setupSaved:"Konfiguracja zapisana ✓",dupConfirm:"Właśnie to zeskanowano. Na pewno jeszcze raz?",seqConfirm:"Uwaga: wcześniej nie zeskanowano załadunku. Mimo to zapisać?",undoBtn:"↩ Usuń ostatni skan",undoneToast:"Usunięto",st_SAND_LADEN:"Załadunek piasku",st_SAND_KIPPEN:"Rozładunek piasku",st_BODEN_LADEN:"Załadunek ziemi",st_BODEN_KIPPEN:"Rozładunek ziemi",st_BODEN_NESSEL:"Rozładunek ziemi",st_BODEN_INTERN:"Rozładunek ziemi",site:"Budowa",gpsDecides:"(GPS decyduje)",siteOther:"Budowa · inne miejsce"},
+es:{loginSub:"Inicio de sesión",pwLabel:"Contraseña",loginBtn:"Entrar",wrongPw:"Contraseña incorrecta.",plateH:"Matrícula",plateSub:"Obligatorio – escribe la matrícula de este camión.",plateBtn:"Continuar",scanBtn:"📷 Escanear código QR",manualBtn:"Sin cámara",todayHdr:"Registrado hoy",exportBtn:"💾 Guardar datos (exportar)",changePlateBtn:"Cambiar matrícula",logoutBtn:"Salir",cancelBtn:"Cancelar",online:"En línea",offline:"Sin internet",notSetup:"⚠ El teléfono no está configurado – abre el enlace del jefe de obra. Hasta entonces los datos se guardan solo en el teléfono.",uploadRejected:"⚠ Envío rechazado – avisa al jefe de obra. Los datos quedan guardados en el teléfono.",nothingYet:"Nada registrado todavía.",gpsMissing:"sin GPS",noGps:"Sin señal GPS – guardado igualmente",scanned:"Registrado: ",unknownQr:"Código QR desconocido",noCamera:"La cámara no funciona – usa «Sin cámara»",noData:"No hay datos",exportDone:"Exportación creada",setupSaved:"Configuración guardada ✓",dupConfirm:"Acabas de escanear esto. ¿Seguro otra vez?",seqConfirm:"Atención: antes no se escaneó la carga. ¿Guardar igualmente?",undoBtn:"↩ Borrar último escaneo",undoneToast:"Borrado",st_SAND_LADEN:"Cargar arena",st_SAND_KIPPEN:"Descargar arena",st_BODEN_LADEN:"Cargar tierra",st_BODEN_KIPPEN:"Descargar tierra",st_BODEN_NESSEL:"Descargar tierra",st_BODEN_INTERN:"Descargar tierra",site:"Obra",gpsDecides:"(el GPS decide)",siteOther:"Obra · otro lugar"},
+it:{loginSub:"Accesso",pwLabel:"Password",loginBtn:"Entra",wrongPw:"Password sbagliata.",plateH:"Targa",plateSub:"Obbligatorio – scrivi la targa di questo camion.",plateBtn:"Avanti",scanBtn:"📷 Scansiona codice QR",manualBtn:"Senza fotocamera",todayHdr:"Registrato oggi",exportBtn:"💾 Salva dati (esporta)",changePlateBtn:"Cambia targa",logoutBtn:"Esci",cancelBtn:"Annulla",online:"Online",offline:"Niente internet",notSetup:"⚠ Il telefono non è configurato – apri il link del capocantiere. Fino ad allora i dati restano solo sul telefono.",uploadRejected:"⚠ Invio rifiutato – avvisa il capocantiere. I dati restano salvati sul telefono.",nothingYet:"Ancora niente.",gpsMissing:"niente GPS",noGps:"Nessun segnale GPS – salvato comunque",scanned:"Registrato: ",unknownQr:"Codice QR sconosciuto",noCamera:"La fotocamera non funziona – usa «Senza fotocamera»",noData:"Nessun dato",exportDone:"Esportazione creata",setupSaved:"Configurazione salvata ✓",dupConfirm:"L'hai appena scansionato. Sicuro di nuovo?",seqConfirm:"Attenzione: prima non è stato scansionato il carico. Salvare comunque?",undoBtn:"↩ Cancella ultima scansione",undoneToast:"Cancellato",st_SAND_LADEN:"Carico sabbia",st_SAND_KIPPEN:"Scarico sabbia",st_BODEN_LADEN:"Carico terra",st_BODEN_KIPPEN:"Scarico terra",st_BODEN_NESSEL:"Scarico terra",st_BODEN_INTERN:"Scarico terra",site:"Cantiere",gpsDecides:"(decide il GPS)",siteOther:"Cantiere · altro posto"},
+sq:{loginSub:"Hyrja",pwLabel:"Fjalëkalimi",loginBtn:"Hyr",wrongPw:"Fjalëkalim i gabuar.",plateH:"Targa",plateSub:"E detyrueshme – shkruaj targën e këtij kamioni.",plateBtn:"Vazhdo",scanBtn:"📷 Skano kodin QR",manualBtn:"Pa kamerë",todayHdr:"Regjistruar sot",exportBtn:"💾 Ruaj të dhënat (eksport)",changePlateBtn:"Ndrysho targën",logoutBtn:"Dil",cancelBtn:"Anulo",online:"Online",offline:"S'ka internet",notSetup:"⚠ Telefoni nuk është konfiguruar – hap linkun nga shefi i kantierit. Deri atëherë të dhënat ruhen vetëm në telefon.",uploadRejected:"⚠ Dërgimi u refuzua – njofto shefin e kantierit. Të dhënat mbeten të ruajtura në telefon.",nothingYet:"Asgjë e regjistruar ende.",gpsMissing:"s'ka GPS",noGps:"S'ka sinjal GPS – u ruajt gjithsesi",scanned:"U regjistrua: ",unknownQr:"Kod QR i panjohur",noCamera:"Kamera nuk punon – përdor «Pa kamerë»",noData:"S'ka të dhëna",exportDone:"Eksporti u krijua",setupSaved:"Konfigurimi u ruajt ✓",dupConfirm:"Sapo e skanove këtë. Vërtet edhe një herë?",seqConfirm:"Kujdes: më parë nuk u skanua ngarkimi. Ta ruaj gjithsesi?",undoBtn:"↩ Fshi skanimin e fundit",undoneToast:"U fshi",st_SAND_LADEN:"Ngarkim rëre",st_SAND_KIPPEN:"Shkarkim rëre",st_BODEN_LADEN:"Ngarkim dheu",st_BODEN_KIPPEN:"Shkarkim dheu",st_BODEN_NESSEL:"Shkarkim dheu",st_BODEN_INTERN:"Shkarkim dheu",site:"Kantieri",gpsDecides:"(vendos GPS-i)",siteOther:"Kantieri · vend tjetër"},
+uk:{loginSub:"Вхід",pwLabel:"Пароль",loginBtn:"Увійти",wrongPw:"Невірний пароль.",plateH:"Номер машини",plateSub:"Обов'язково – введіть номер цієї вантажівки.",plateBtn:"Далі",scanBtn:"📷 Сканувати QR-код",manualBtn:"Без камери",todayHdr:"Записано сьогодні",exportBtn:"💾 Зберегти дані (експорт)",changePlateBtn:"Змінити номер",logoutBtn:"Вийти",cancelBtn:"Скасувати",online:"Онлайн",offline:"Немає інтернету",notSetup:"⚠ Телефон не налаштований – відкрийте посилання від виконроба. До того часу дані зберігаються лише на телефоні.",uploadRejected:"⚠ Відправлення відхилено – скажіть виконробу. Дані залишаються на телефоні.",nothingYet:"Ще нічого не записано.",gpsMissing:"без GPS",noGps:"Немає сигналу GPS – все одно збережено",scanned:"Записано: ",unknownQr:"Невідомий QR-код",noCamera:"Камера не працює – використайте «Без камери»",noData:"Немає даних",exportDone:"Експорт створено",setupSaved:"Налаштування збережено ✓",dupConfirm:"Ви щойно це сканували. Точно ще раз?",seqConfirm:"Увага: перед цим не скановано завантаження. Все одно зберегти?",undoBtn:"↩ Видалити останній скан",undoneToast:"Видалено",st_SAND_LADEN:"Завантаження піску",st_SAND_KIPPEN:"Розвантаження піску",st_BODEN_LADEN:"Завантаження ґрунту",st_BODEN_KIPPEN:"Розвантаження ґрунту",st_BODEN_NESSEL:"Розвантаження ґрунту",st_BODEN_INTERN:"Розвантаження ґрунту",site:"Будмайданчик",gpsDecides:"(вирішує GPS)",siteOther:"Будмайданчик · інше місце"},
+};
+
+let lang = localStorage.getItem("ft_lang") || (navigator.language || "de").slice(0,2).toLowerCase();
+if (!I18N[lang]) lang = "de";
+const t = k => (I18N[lang] && I18N[lang][k]) || I18N.de[k] || k;
+
 /* ============================================================ */
-const STATIONS = {
-  SAND_LADEN  : { label:"Sand laden",     ort:"Röhrda" },
-  SAND_KIPPEN : { label:"Sand abkippen",  ort:"Baustelle" },
-  BODEN_LADEN : { label:"Boden laden",    ort:"Baustelle" },
-  BODEN_KIPPEN: { label:"Boden abkippen", ort:"(GPS entscheidet)" },
-};
-const LABEL = { ...STATIONS,
-  BODEN_NESSEL:{ label:"Boden abkippen", ort:"Nesselröden" },
-  BODEN_INTERN:{ label:"Boden abkippen", ort:"Baustelle · andere Stelle" },
-};
+const STATION_KEYS = ["SAND_LADEN","SAND_KIPPEN","BODEN_LADEN","BODEN_KIPPEN"];
+const stationOf = a => (a === "BODEN_NESSEL" || a === "BODEN_INTERN") ? "BODEN_KIPPEN" : a;
+const stText = a => t("st_" + a);
+function ortText(a){
+  return ({ SAND_LADEN:"Röhrda", SAND_KIPPEN:t("site"), BODEN_LADEN:t("site"),
+            BODEN_KIPPEN:t("gpsDecides"), BODEN_NESSEL:"Nesselröden", BODEN_INTERN:t("siteOther") })[a] || "";
+}
+// QR-Druckseite bewusst nur Deutsch (hängt vor Ort aus):
+const QR_DE = { SAND_LADEN:["Sand laden","Röhrda"], SAND_KIPPEN:["Sand abkippen","Baustelle"],
+                BODEN_LADEN:["Boden laden","Baustelle"], BODEN_KIPPEN:["Boden abkippen","(GPS entscheidet)"] };
 
 const LS = { scans:"ft_scans", plate:"ft_plate", auth:"ft_auth", token:"ft_token" };
 const getToken = () => localStorage.getItem(LS.token) || "";
@@ -155,30 +180,58 @@ const b64 = s => btoa(unescape(encodeURIComponent(s)));
 
 let scans = [];
 let plate = "";
-let lastPos = null;       // vorgewärmte GPS-Position
+let lastPos = null;
 let flushing = false;
 let scanner = null;
-let uploadErr = null;     // null | "auth" (Token/Repo falsch) – Netzfehler zählen nicht
+let uploadErr = null;     // null | "auth"
+let undoTimer = null;
 
 /* ---------- Speicher ---------- */
 function load(){
   try { scans = JSON.parse(localStorage.getItem(LS.scans) || "[]"); } catch { scans = []; }
   plate = localStorage.getItem(LS.plate) || "";
-  // Vortagesdaten löschen (nur bereits gesendete – nicht gesendete bleiben zum Nachholen):
   const before = scans.length;
   scans = scans.filter(s => s.dateStr === todayStr() || !s.synced);
   if (scans.length !== before) save();
 }
 function save(){ localStorage.setItem(LS.scans, JSON.stringify(scans)); }
 
+/* ---------- Sprache ---------- */
+function buildLangSel(el){
+  if (!el) return;
+  el.innerHTML = Object.entries(LANGS).map(([k,v]) =>
+    `<option value="${k}"${k===lang?" selected":""}>${v}</option>`).join("");
+  el.onchange = e => {
+    lang = e.target.value; localStorage.setItem("ft_lang", lang);
+    buildLangSel($("langSel")); buildLangSel($("langSel2")); applyTexts();
+  };
+}
+function applyTexts(){
+  $("t_loginSub").textContent = t("loginSub");
+  $("t_pwLabel").textContent = t("pwLabel");
+  $("loginBtn").textContent = t("loginBtn");
+  $("loginErr").textContent = t("wrongPw");
+  $("t_plateH").textContent = t("plateH");
+  $("t_plateSub").textContent = t("plateSub");
+  $("t_plateLabel").textContent = t("plateH");
+  $("plateBtn").textContent = t("plateBtn");
+  $("scanBtn").textContent = t("scanBtn");
+  $("manualBtn").textContent = t("manualBtn");
+  $("t_todayHdr").textContent = t("todayHdr");
+  $("exportBtn").textContent = t("exportBtn");
+  $("changePlate").textContent = t("changePlateBtn");
+  $("logoutBtn").textContent = t("logoutBtn");
+  $("closeScan").textContent = t("cancelBtn");
+  buildStationButtons(); renderList(); updateStatus();
+}
+
 /* ---------- Ansichten ---------- */
 function show(id){ document.querySelectorAll(".view").forEach(v=>v.classList.remove("active")); $(id).classList.add("active"); }
 function route(){
-  // Einmalige Geräte-Einrichtung: Setup-Link speichert den Upload-Zugang lokal
   if (location.hash.startsWith("#setup=")) {
-    const t = decodeURIComponent(location.hash.slice(7)).trim();
-    if (t) { localStorage.setItem(LS.token, t); uploadErr = null; showToast("Einrichtung gespeichert ✓"); }
-    history.replaceState(null, "", location.pathname);  // Token sofort aus URL entfernen
+    const tok = decodeURIComponent(location.hash.slice(7)).trim();
+    if (tok) { localStorage.setItem(LS.token, tok); uploadErr = null; showToast(t("setupSaved")); }
+    history.replaceState(null, "", location.pathname);
   }
   if (location.hash === "#qr") { renderQR(); return show("v-qr"); }
   if (localStorage.getItem(LS.auth) !== "1") return show("v-login");
@@ -212,8 +265,6 @@ function startMain(){
   renderList();
   warmGPS();
   updateStatus();
-  $("cfgWarn").textContent = getToken() ? "" :
-    "⚠ Gerät noch nicht eingerichtet – bitte den Setup-Link vom Bauleiter öffnen. Scans werden bis dahin nur lokal gespeichert.";
   show("v-main");
 }
 $("changePlate").onclick = () => { show("v-plate"); $("plate").value = plate; $("plateBtn").disabled = !plate; };
@@ -222,9 +273,9 @@ $("manualBtn").onclick = () => { const b=$("manualBox"); b.style.display = b.sty
 
 function buildStationButtons(){
   $("stationBtns").innerHTML = "";
-  Object.entries(STATIONS).forEach(([key,s])=>{
+  STATION_KEYS.forEach(key => {
     const b=document.createElement("button"); b.className="sbtn";
-    b.innerHTML = `${s.label}<small>${s.ort}</small>`;
+    b.innerHTML = `${stText(key)}<small>${ortText(key)}</small>`;
     b.onclick = () => record(key);
     $("stationBtns").appendChild(b);
   });
@@ -240,7 +291,7 @@ function warmGPS(){
 }
 function getGPS(){
   return new Promise(res=>{
-    if (lastPos) return res(lastPos);           // vorgewärmt → sofort
+    if (lastPos) return res(lastPos);
     if (!navigator.geolocation) return res(null);
     navigator.geolocation.getCurrentPosition(
       p => res({ lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6) }),
@@ -253,22 +304,52 @@ function distM(a,b){ const R=6371000,r=x=>x*Math.PI/180;
   const s=Math.sin(dLa/2)**2 + Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLo/2)**2;
   return 2*R*Math.asin(Math.sqrt(s)); }
 
-/* ---------- Scan erfassen ---------- */
+/* ---------- Scan erfassen (mit Fehlbedienungs-Schutz) ---------- */
 async function record(stationKey){
+  const last = scans[scans.length-1];
+  // Schutz 1: Doppel-Scan derselben Station innerhalb von 3 Minuten
+  if (last && stationOf(last.action) === stationKey && Date.now() - Date.parse(last.ts) < 180000){
+    if (!confirm(t("dupConfirm"))) return;
+  }
+  // Schutz 2: Abkippen ohne vorher gescanntes Laden
+  const lastSt = last ? stationOf(last.action) : null;
+  if ((stationKey === "SAND_KIPPEN" && lastSt !== "SAND_LADEN") ||
+      (stationKey === "BODEN_KIPPEN" && lastSt !== "BODEN_LADEN")){
+    if (!confirm(t("seqConfirm"))) return;
+  }
   const pos = await getGPS();
   let action = stationKey;
   if (stationKey === "BODEN_KIPPEN")
     action = (pos && distM(pos, CONFIG.NESSELROEDEN) <= CONFIG.NESSELROEDEN.radiusMeter) ? "BODEN_NESSEL" : "BODEN_INTERN";
   const scan = { id:uid(), plate, action, ts:new Date().toISOString(),
-                 lat: pos?.lat ?? null, lng: pos?.lng ?? null, dateStr:todayStr(), synced:false };
+                 lat: pos?.lat ?? null, lng: pos?.lng ?? null, dateStr:todayStr(),
+                 synced:false, hold: Date.now() + 15000 };   // 15 s Undo-Fenster vor Upload
   scans.push(scan); save(); renderList(); updateStatus();
-  showToast("Erfasst: " + LABEL[action].label);
-  flush();  // Hintergrund-Upload, blockiert nichts
+  // Schutz 4: fehlendes GPS deutlich machen (gespeichert wird trotzdem)
+  showToast(t("scanned") + stText(action) + (pos ? "" : " · " + t("noGps")));
+  showUndo(scan.id);                                          // Schutz 3: 15 s rückgängig
+  setTimeout(flush, 16000);
+  flush();
 }
 
+/* Schutz 3: letzten Scan innerhalb von 15 s löschen */
+function showUndo(id){
+  const b = $("undoBar");
+  b.textContent = t("undoBtn");
+  b.style.display = "block";
+  b.onclick = () => {
+    const i = scans.findIndex(s => s.id === id);
+    if (i >= 0 && !scans[i].synced){ scans.splice(i,1); save(); renderList(); updateStatus(); showToast(t("undoneToast")); }
+    hideUndo();
+  };
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndo, 15000);
+}
+function hideUndo(){ $("undoBar").style.display = "none"; clearTimeout(undoTimer); flush(); }
+
 function normalizeQR(text){
-  const t = String(text).trim().toUpperCase().replace(/^FT[:\-]/,"");
-  return STATIONS[t] ? t : null;
+  const s = String(text).trim().toUpperCase().replace(/^FT[:\-]/,"");
+  return STATION_KEYS.includes(s) ? s : null;
 }
 
 /* ---------- Kamera ---------- */
@@ -277,9 +358,9 @@ $("scanBtn").onclick = async () => {
   try {
     scanner = new Html5Qrcode("reader");
     await scanner.start({ facingMode:"environment" }, { fps:10, qrbox:250 },
-      txt => { const k = normalizeQR(txt); if (k){ stopScanner(); record(k);} else showToast("Unbekannter QR-Code"); },
+      txt => { const k = normalizeQR(txt); if (k){ stopScanner(); record(k);} else showToast(t("unknownQr")); },
       () => {});
-  } catch(e){ showToast("Kamera nicht verfügbar – nutze „Ohne Kamera"); stopScanner(); }
+  } catch(e){ showToast(t("noCamera")); stopScanner(); }
 };
 $("closeScan").onclick = stopScanner;
 function stopScanner(){
@@ -296,21 +377,21 @@ async function uploadOne(scan){
     headers:{ "Authorization":`Bearer ${getToken()}`, "Accept":"application/vnd.github+json" },
     body: JSON.stringify({ message:`scan ${scan.id}`, content:b64(JSON.stringify(payload)), branch:CONFIG.GITHUB_BRANCH })
   });
-  if (res.ok || res.status === 422){ uploadErr = null; return true; }  // 422 = existiert schon
-  if ([401,403,404].includes(res.status)) uploadErr = "auth";          // Token/Repo falsch → Warnung zeigen
+  if (res.ok || res.status === 422){ uploadErr = null; return true; }
+  if ([401,403,404].includes(res.status)) uploadErr = "auth";
   return false;
 }
 async function flush(){
   if (flushing || !navigator.onLine) return;
-  if (!getToken()) return;   // Gerät noch nicht eingerichtet
+  if (!getToken()) return;
   flushing = true;
   try {
-    for (const s of scans.filter(x=>!x.synced)){
+    for (const s of scans.filter(x => !x.synced && !(x.hold && x.hold > Date.now()))){
       try {
         if (await uploadOne(s)){ s.synced=true; save(); renderList(); }
-        else if (uploadErr === "auth") break;  // Zugang falsch → nicht alle durchprobieren
+        else if (uploadErr === "auth") break;
       }
-      catch { break; }  // Netzfehler → später erneut
+      catch { break; }
     }
   } finally { flushing = false; updateStatus(); }
 }
@@ -324,29 +405,30 @@ function renderList(){
   $("scanList").innerHTML = scans.slice().reverse().map(s=>`
     <div class="scan-item">
       <span class="t">${hhmm(s.ts)}</span>
-      <span>${LABEL[s.action].label} · <span style="color:var(--mut)">${LABEL[s.action].ort}</span></span>
-      <span class="gps">${s.lat!=null ? s.lat+", "+s.lng : "kein GPS"}</span>
-      <span title="${s.synced?"gesendet":"lokal gespeichert"}">${s.synced ? "✓" : "⏳"}</span>
-    </div>`).join("") || `<p class="sub">Noch nichts erfasst.</p>`;
+      <span>${stText(s.action)} · <span style="color:var(--mut)">${ortText(s.action)}</span></span>
+      <span class="gps">${s.lat!=null ? s.lat+", "+s.lng : t("gpsMissing")}</span>
+      <span>${s.synced ? "✓" : "⏳"}</span>
+    </div>`).join("") || `<p class="sub">${t("nothingYet")}</p>`;
 }
 function updateStatus(){
   const pending = scans.filter(s=>!s.synced).length;
   const on = navigator.onLine;
   $("hStatus").innerHTML =
-    `<span class="dot" style="background:${on?'var(--ok)':'var(--warn)'}"></span>${on?'Online':'Kein Netz'}`
+    `<span class="dot" style="background:${on?'var(--ok)':'var(--warn)'}"></span>${on?t("online"):t("offline")}`
     + (pending ? ` · ⏳ ${pending}` : "");
-  // Schutznetz 2: Upload wird abgelehnt (Token/Repo falsch) → deutlich warnen
   if (uploadErr === "auth")
-    $("cfgWarn").innerHTML = `<span style="color:var(--warn)">⚠ Upload abgelehnt – GitHub-Zugang prüfen (Token/Repo). Scans bleiben lokal gespeichert; im Zweifel „Daten sichern" nutzen.</span>`;
+    $("cfgWarn").innerHTML = `<span style="color:var(--warn)">${t("uploadRejected")}</span>`;
+  else
+    $("cfgWarn").textContent = getToken() ? "" : t("notSetup");
 }
 window.addEventListener("online", updateStatus);
 window.addEventListener("offline", updateStatus);
 
-function showToast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1800); }
+function showToast(msg){ const el=$("toast"); el.textContent=msg; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"),2200); }
 
-/* ---------- Schutznetz 3: Notfall-Export (Teilen/Download) ---------- */
+/* ---------- Notfall-Export (Teilen/Download) ---------- */
 $("exportBtn").onclick = async () => {
-  if (!scans.length) return showToast("Keine Daten vorhanden");
+  if (!scans.length) return showToast(t("noData"));
   const data = JSON.stringify(scans.map(s => ({ id:s.id, plate:s.plate, action:s.action, ts:s.ts, lat:s.lat, lng:s.lng, synced:!!s.synced })), null, 1);
   const name = `scans-${(plate||"lkw").replace(/[^A-Z0-9]/gi,"")}-${todayStr()}.json`;
   const file = new File([data], name, { type:"application/json" });
@@ -356,15 +438,15 @@ $("exportBtn").onclick = async () => {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([data], { type:"application/json" }));
   a.download = name; a.click(); URL.revokeObjectURL(a.href);
-  showToast("Export erstellt");
+  showToast(t("exportDone"));
 };
 
 /* ---------- QR-Codes drucken ---------- */
 function renderQR(){
   const box = $("qrCards"); box.innerHTML="";
-  Object.entries(STATIONS).forEach(([key,s])=>{
+  Object.entries(QR_DE).forEach(([key, [label, ort]])=>{
     const c=document.createElement("div"); c.className="qrcard";
-    c.innerHTML=`<h3>${s.label}</h3><p>${s.ort}</p><div class="qrbox"></div>`;
+    c.innerHTML=`<h3>${label}</h3><p>${ort}</p><div class="qrbox"></div>`;
     box.appendChild(c);
     new QRCode(c.querySelector(".qrbox"), { text:key, width:200, height:200, correctLevel:QRCode.CorrectLevel.M });
   });
@@ -372,9 +454,11 @@ function renderQR(){
 window.addEventListener("hashchange", route);
 
 /* ---------- Start ---------- */
-load(); route(); flush();
+load();
+buildLangSel($("langSel")); buildLangSel($("langSel2"));
+applyTexts();
+route(); flush();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
-// Schutznetz 1: Browser bitten, die Daten NICHT automatisch zu löschen (iOS 7-Tage-Regel etc.)
 if (navigator.storage?.persist) navigator.storage.persist().catch(()=>{});
 </script>
 </body>
