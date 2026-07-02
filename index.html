@@ -49,6 +49,7 @@
   .qrcards { display:grid; gap:20px; }
   .qrcard { background:#fff; color:#111; padding:16px; border-radius:12px; text-align:center; }
   .qrcard h3 { margin:0 0 4px; } .qrcard p { margin:0 0 10px; color:#555; }
+  .qrcard .qrbox { display:flex; justify-content:center; }
   .muted { color:var(--mut); font-size:12px; margin-top:20px; line-height:1.5; }
 </style>
 </head>
@@ -110,7 +111,7 @@
 <div id="toast" class="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 /* ============================================================
    KONFIGURATION  – hier trägst du deine Werte ein
@@ -363,9 +364,9 @@ function renderQR(){
   const box = $("qrCards"); box.innerHTML="";
   Object.entries(STATIONS).forEach(([key,s])=>{
     const c=document.createElement("div"); c.className="qrcard";
-    c.innerHTML=`<h3>${s.label}</h3><p>${s.ort}</p><canvas></canvas>`;
+    c.innerHTML=`<h3>${s.label}</h3><p>${s.ort}</p><div class="qrbox"></div>`;
     box.appendChild(c);
-    QRCode.toCanvas(c.querySelector("canvas"), key, { width:200 });
+    new QRCode(c.querySelector(".qrbox"), { text:key, width:200, height:200, correctLevel:QRCode.CorrectLevel.M });
   });
 }
 window.addEventListener("hashchange", route);
