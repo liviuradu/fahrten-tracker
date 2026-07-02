@@ -178,6 +178,19 @@ sq:{sendBtn:"📤 Dërgo tani",sendDone:"U dërgua gjithçka ✓",sendSome:"Ende
 uk:{sendBtn:"📤 Надіслати зараз",sendDone:"Все надіслано ✓",sendSome:"Ще не надіслано: ",sendOffline:"Немає інтернету – надішлеться автоматично пізніше"},
 };
 Object.entries(EXTRA).forEach(([l,d]) => Object.assign(I18N[l], d));
+const EXTRA2 = {
+de:{exportBtn:"📄 Tagesliste (PDF)",colTime:"Uhrzeit",colStation:"Station",colPlace:"Ort"},
+en:{exportBtn:"📄 Day list (PDF)",colTime:"Time",colStation:"Station",colPlace:"Place"},
+ro:{exportBtn:"📄 Lista zilei (PDF)",colTime:"Ora",colStation:"Stația",colPlace:"Loc"},
+sr:{exportBtn:"📄 Dnevna lista (PDF)",colTime:"Vreme",colStation:"Stanica",colPlace:"Mesto"},
+hu:{exportBtn:"📄 Napi lista (PDF)",colTime:"Idő",colStation:"Állomás",colPlace:"Hely"},
+pl:{exportBtn:"📄 Lista dnia (PDF)",colTime:"Godzina",colStation:"Stacja",colPlace:"Miejsce"},
+es:{exportBtn:"📄 Lista del día (PDF)",colTime:"Hora",colStation:"Estación",colPlace:"Lugar"},
+it:{exportBtn:"📄 Lista del giorno (PDF)",colTime:"Ora",colStation:"Stazione",colPlace:"Luogo"},
+sq:{exportBtn:"📄 Lista e ditës (PDF)",colTime:"Ora",colStation:"Stacioni",colPlace:"Vendi"},
+uk:{exportBtn:"📄 Список дня (PDF)",colTime:"Час",colStation:"Станція",colPlace:"Місце"},
+};
+Object.entries(EXTRA2).forEach(([l,d]) => Object.assign(I18N[l], d));
 
 let lang = localStorage.getItem("ft_lang") || (navigator.language || "de").slice(0,2).toLowerCase();
 if (!I18N[lang]) lang = "de";
@@ -454,19 +467,32 @@ window.addEventListener("offline", updateStatus);
 
 function showToast(msg){ const el=$("toast"); el.textContent=msg; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"),2200); }
 
-/* ---------- Notfall-Export (Teilen/Download) ---------- */
-$("exportBtn").onclick = async () => {
+/* ---------- Tagesliste als PDF (Druckansicht) ---------- */
+$("exportBtn").onclick = () => {
   if (!scans.length) return showToast(t("noData"));
-  const data = JSON.stringify(scans.map(s => ({ id:s.id, plate:s.plate, action:s.action, ts:s.ts, lat:s.lat, lng:s.lng, synced:!!s.synced })), null, 1);
-  const name = `scans-${(plate||"lkw").replace(/[^A-Z0-9]/gi,"")}-${todayStr()}.json`;
-  const file = new File([data], name, { type:"application/json" });
-  if (navigator.canShare && navigator.canShare({ files:[file] })) {
-    try { await navigator.share({ files:[file], title:"Fahrten-Scans" }); return; } catch { /* abgebrochen → Download */ }
-  }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([data], { type:"application/json" }));
-  a.download = name; a.click(); URL.revokeObjectURL(a.href);
-  showToast(t("exportDone"));
+  const rows = scans.map(s => `<tr><td>${hhmm(s.ts)}</td><td>${stText(s.action)}</td><td>${ortText(s.action)}</td><td>${s.lat!=null ? s.lat+", "+s.lng : t("gpsMissing")}</td><td style="text-align:center">${s.synced ? "✓" : "⏳"}</td></tr>`).join("");
+  const win = window.open("", "_blank");
+  if (!win) return showToast("Popup blockiert");
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fahrten ${todayStr()} ${plate}</title><style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:20px;color:#111}
+    .kopf{background:#1a2545;color:#fff;padding:14px 18px;border-radius:10px;display:flex;justify-content:space-between;align-items:center}
+    .kopf b{font-size:22px;letter-spacing:1px} .kopf small{opacity:.85}
+    h2{margin:18px 0 10px;font-size:17px}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{border:1px solid #bbb;padding:7px 9px;text-align:left}
+    th{background:#eef1f7} tr:nth-child(even) td{background:#f7f9fc}
+    .fuss{margin-top:14px;color:#777;font-size:11px}
+    .noprint{margin-top:18px;padding:14px 20px;font-size:16px;background:#f59e0b;border:none;border-radius:10px;font-weight:bold;width:100%}
+    @media print{.noprint{display:none}}
+  </style></head><body>
+    <div class="kopf"><div><b>ARGE</b><br><small>Tiefbau SuedLink Los 3 · Fahrten-Tracker</small></div>
+    <div style="text-align:right"><b>${plate}</b><br><small>${new Date().toLocaleDateString("de-DE")}</small></div></div>
+    <h2>${t("todayHdr")}: ${scans.length}</h2>
+    <table><tr><th>${t("colTime")}</th><th>${t("colStation")}</th><th>${t("colPlace")}</th><th>GPS</th><th>✓</th></tr>${rows}</table>
+    <div class="fuss">✓ = ${t("sendDone")} · ⏳ = ${t("sendSome")}… · HABAU INFRA · Bickhardt bau · PPS · HABAU</div>
+    <button class="noprint" onclick="print()">🖨 PDF</button>
+  </body></html>`);
+  win.document.close();
 };
 
 /* ---------- Jetzt senden (manuell, idempotent – überschreibt/ergänzt nur) ---------- */
