@@ -94,7 +94,8 @@
     </div>
     <h3 style="margin:22px 0 4px; font-size:15px;"><span id="t_todayHdr">Heute erfasst</span> (<span id="cnt">0</span>)</h3>
     <div id="scanList"></div>
-    <button id="exportBtn" class="btn btn-ghost" style="margin-top:22px;">💾 Daten sichern (Export)</button>
+    <button id="sendBtn" class="btn btn-primary" style="margin-top:22px;">📤 Jetzt senden</button>
+    <button id="exportBtn" class="btn btn-ghost">💾 Daten sichern (Export)</button>
     <button id="changePlate" class="btn btn-ghost">Kennzeichen ändern</button>
     <button id="logoutBtn" class="btn btn-ghost">Abmelden</button>
     <div style="text-align:center; margin-top:16px;"><select id="langSel2" class="langsel"></select></div>
@@ -113,6 +114,16 @@
   <h1>QR-Codes zum Ausdrucken</h1>
   <p class="sub">Je Station einmal ausdrucken und vor Ort anbringen. „Boden abkippen" ist EIN Code – Nesselröden vs. Baustelle entscheidet das GPS.</p>
   <div class="qrcards" id="qrCards"></div>
+</section>
+
+<!-- Test-Seite für den Bauleiter (Aufruf: #test) -->
+<section id="v-admin" class="view">
+  <h1>Test / Bericht sofort</h1>
+  <p class="sub">Nur für den Bauleiter. / Doar pentru șeful de șantier.</p>
+  <button id="testBtn" class="btn btn-primary">📧 Bericht JETZT per E-Mail senden</button>
+  <p class="muted">Erstellt sofort die Excel aus allen bisher hochgeladenen Scans (alle LKW) und mailt sie an die eingestellten Empfänger. Achtung: Die enthaltenen Scans gelten danach als verarbeitet und werden aus dem Daten-Repo gelöscht.<br>Atenție: scanările incluse se șterg din baza de date după trimitere (sunt considerate raportate).</p>
+  <p class="muted" id="testMsg" style="color:var(--amber)"></p>
+  <button id="testBack" class="btn btn-ghost">Zurück / Înapoi</button>
 </section>
 
 <button id="undoBar" class="btn btn-ghost"></button>
@@ -153,6 +164,20 @@ it:{loginSub:"Accesso",pwLabel:"Password",loginBtn:"Entra",wrongPw:"Password sba
 sq:{loginSub:"Hyrja",pwLabel:"Fjalëkalimi",loginBtn:"Hyr",wrongPw:"Fjalëkalim i gabuar.",plateH:"Targa",plateSub:"E detyrueshme – shkruaj targën e këtij kamioni.",plateBtn:"Vazhdo",scanBtn:"📷 Skano kodin QR",manualBtn:"Pa kamerë",todayHdr:"Regjistruar sot",exportBtn:"💾 Ruaj të dhënat (eksport)",changePlateBtn:"Ndrysho targën",logoutBtn:"Dil",cancelBtn:"Anulo",online:"Online",offline:"S'ka internet",notSetup:"⚠ Telefoni nuk është konfiguruar – hap linkun nga shefi i kantierit. Deri atëherë të dhënat ruhen vetëm në telefon.",uploadRejected:"⚠ Dërgimi u refuzua – njofto shefin e kantierit. Të dhënat mbeten të ruajtura në telefon.",nothingYet:"Asgjë e regjistruar ende.",gpsMissing:"s'ka GPS",noGps:"S'ka sinjal GPS – u ruajt gjithsesi",scanned:"U regjistrua: ",unknownQr:"Kod QR i panjohur",noCamera:"Kamera nuk punon – përdor «Pa kamerë»",noData:"S'ka të dhëna",exportDone:"Eksporti u krijua",setupSaved:"Konfigurimi u ruajt ✓",dupConfirm:"Sapo e skanove këtë. Vërtet edhe një herë?",seqConfirm:"Kujdes: më parë nuk u skanua ngarkimi. Ta ruaj gjithsesi?",undoBtn:"↩ Fshi skanimin e fundit",undoneToast:"U fshi",st_SAND_LADEN:"Ngarkim rëre",st_SAND_KIPPEN:"Shkarkim rëre",st_BODEN_LADEN:"Ngarkim dheu",st_BODEN_KIPPEN:"Shkarkim dheu",st_BODEN_NESSEL:"Shkarkim dheu",st_BODEN_INTERN:"Shkarkim dheu",site:"Kantieri",gpsDecides:"(vendos GPS-i)",siteOther:"Kantieri · vend tjetër"},
 uk:{loginSub:"Вхід",pwLabel:"Пароль",loginBtn:"Увійти",wrongPw:"Невірний пароль.",plateH:"Номер машини",plateSub:"Обов'язково – введіть номер цієї вантажівки.",plateBtn:"Далі",scanBtn:"📷 Сканувати QR-код",manualBtn:"Без камери",todayHdr:"Записано сьогодні",exportBtn:"💾 Зберегти дані (експорт)",changePlateBtn:"Змінити номер",logoutBtn:"Вийти",cancelBtn:"Скасувати",online:"Онлайн",offline:"Немає інтернету",notSetup:"⚠ Телефон не налаштований – відкрийте посилання від виконроба. До того часу дані зберігаються лише на телефоні.",uploadRejected:"⚠ Відправлення відхилено – скажіть виконробу. Дані залишаються на телефоні.",nothingYet:"Ще нічого не записано.",gpsMissing:"без GPS",noGps:"Немає сигналу GPS – все одно збережено",scanned:"Записано: ",unknownQr:"Невідомий QR-код",noCamera:"Камера не працює – використайте «Без камери»",noData:"Немає даних",exportDone:"Експорт створено",setupSaved:"Налаштування збережено ✓",dupConfirm:"Ви щойно це сканували. Точно ще раз?",seqConfirm:"Увага: перед цим не скановано завантаження. Все одно зберегти?",undoBtn:"↩ Видалити останній скан",undoneToast:"Видалено",st_SAND_LADEN:"Завантаження піску",st_SAND_KIPPEN:"Розвантаження піску",st_BODEN_LADEN:"Завантаження ґрунту",st_BODEN_KIPPEN:"Розвантаження ґрунту",st_BODEN_NESSEL:"Розвантаження ґрунту",st_BODEN_INTERN:"Розвантаження ґрунту",site:"Будмайданчик",gpsDecides:"(вирішує GPS)",siteOther:"Будмайданчик · інше місце"},
 };
+
+const EXTRA = {
+de:{sendBtn:"📤 Jetzt senden",sendDone:"Alles gesendet ✓",sendSome:"Noch nicht gesendet: ",sendOffline:"Kein Netz – wird später automatisch gesendet"},
+en:{sendBtn:"📤 Send now",sendDone:"All sent ✓",sendSome:"Not sent yet: ",sendOffline:"No internet – will send automatically later"},
+ro:{sendBtn:"📤 Trimite acum",sendDone:"Toate datele au fost trimise ✓",sendSome:"Netrimise încă: ",sendOffline:"Fără internet – se trimit automat mai târziu"},
+sr:{sendBtn:"📤 Pošalji sada",sendDone:"Sve poslato ✓",sendSome:"Još nije poslato: ",sendOffline:"Nema interneta – šalje se automatski kasnije"},
+hu:{sendBtn:"📤 Küldés most",sendDone:"Minden elküldve ✓",sendSome:"Még nincs elküldve: ",sendOffline:"Nincs internet – később automatikusan elküldi"},
+pl:{sendBtn:"📤 Wyślij teraz",sendDone:"Wszystko wysłane ✓",sendSome:"Jeszcze nie wysłane: ",sendOffline:"Brak internetu – wyśle się automatycznie później"},
+es:{sendBtn:"📤 Enviar ahora",sendDone:"Todo enviado ✓",sendSome:"Sin enviar: ",sendOffline:"Sin internet – se enviará automáticamente"},
+it:{sendBtn:"📤 Invia ora",sendDone:"Tutto inviato ✓",sendSome:"Non inviati: ",sendOffline:"Niente internet – verrà inviato automaticamente"},
+sq:{sendBtn:"📤 Dërgo tani",sendDone:"U dërgua gjithçka ✓",sendSome:"Ende të padërguara: ",sendOffline:"S'ka internet – dërgohet automatikisht më vonë"},
+uk:{sendBtn:"📤 Надіслати зараз",sendDone:"Все надіслано ✓",sendSome:"Ще не надіслано: ",sendOffline:"Немає інтернету – надішлеться автоматично пізніше"},
+};
+Object.entries(EXTRA).forEach(([l,d]) => Object.assign(I18N[l], d));
 
 let lang = localStorage.getItem("ft_lang") || (navigator.language || "de").slice(0,2).toLowerCase();
 if (!I18N[lang]) lang = "de";
@@ -219,6 +244,7 @@ function applyTexts(){
   $("scanBtn").textContent = t("scanBtn");
   $("manualBtn").textContent = t("manualBtn");
   $("t_todayHdr").textContent = t("todayHdr");
+  $("sendBtn").textContent = t("sendBtn");
   $("exportBtn").textContent = t("exportBtn");
   $("changePlate").textContent = t("changePlateBtn");
   $("logoutBtn").textContent = t("logoutBtn");
@@ -235,6 +261,7 @@ function route(){
     history.replaceState(null, "", location.pathname);
   }
   if (location.hash === "#qr") { renderQR(); return show("v-qr"); }
+  if (location.hash === "#test") { return show("v-admin"); }
   if (localStorage.getItem(LS.auth) !== "1") return show("v-login");
   if (!plate) return show("v-plate");
   startMain();
@@ -441,6 +468,35 @@ $("exportBtn").onclick = async () => {
   a.download = name; a.click(); URL.revokeObjectURL(a.href);
   showToast(t("exportDone"));
 };
+
+/* ---------- Jetzt senden (manuell, idempotent – überschreibt/ergänzt nur) ---------- */
+$("sendBtn").onclick = async () => {
+  scans.forEach(s => delete s.hold);   // Undo-Wartezeit aufheben, alles freigeben
+  clearTimeout(undoTimer); $("undoBar").style.display = "none";
+  if (!getToken()) { updateStatus(); return showToast(t("notSetup").slice(0,60)); }
+  if (!navigator.onLine) return showToast(t("sendOffline"));
+  while (flushing) await new Promise(r => setTimeout(r, 150));  // laufenden Upload abwarten
+  await flush();
+  const pending = scans.filter(s => !s.synced).length;
+  showToast(pending ? t("sendSome") + pending : t("sendDone"));
+};
+
+/* ---------- Test-Seite: Bericht sofort erstellen & mailen ---------- */
+$("testBtn").onclick = async () => {
+  $("testMsg").textContent = "…";
+  if (!getToken()) { $("testMsg").textContent = "Kein Zugang eingerichtet – Setup-Link zuerst öffnen."; return; }
+  try {
+    const res = await fetch(`https://api.github.com/repos/${CONFIG.GITHUB_OWNER}/${CONFIG.GITHUB_REPO}/actions/workflows/tagesbericht.yml/dispatches`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${getToken()}`, "Accept": "application/vnd.github+json" },
+      body: JSON.stringify({ ref: CONFIG.GITHUB_BRANCH })
+    });
+    $("testMsg").textContent = res.status === 204
+      ? "✓ Bericht wird erstellt – E-Mail kommt in 1–2 Minuten (SMTP-Secrets müssen eingerichtet sein). / Mailul vine în 1–2 minute."
+      : "Fehler " + res.status + " – Token braucht zusätzlich das Recht Actions: Read and write.";
+  } catch(e) { $("testMsg").textContent = "Netzwerkfehler: " + e.message; }
+};
+$("testBack").onclick = () => { history.replaceState(null, "", location.pathname); route(); };
 
 /* ---------- QR-Codes drucken ---------- */
 function renderQR(){
