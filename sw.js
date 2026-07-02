@@ -1,11 +1,12 @@
 // sw.js – App-Hülle offline verfügbar machen
-const CACHE = "ft-v1";
+const CACHE = "ft-v2";
 const SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
+  "./icon.svg",
   "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js",
-  "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"
+  "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
 ];
 
 self.addEventListener("install", e => {
