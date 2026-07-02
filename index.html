@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>Fahrten-Tracker</title>
+<link rel="manifest" href="./manifest.json">
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --txt:#f1f5f9; --mut:#94a3b8;
+          --amber:#f59e0b; --ok:#10b981; --warn:#f43f5e; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--bg); color:var(--txt); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+         min-height:100dvh; }
+  .view { display:none; padding:16px; max-width:520px; margin:0 auto; }
+  .view.active { display:block; }
+  h1 { font-size:20px; margin:0 0 2px; }
+  .sub { color:var(--mut); font-size:13px; margin:0 0 18px; }
+  label { display:block; font-size:13px; color:var(--mut); margin:14px 0 6px; }
+  input { width:100%; padding:14px; font-size:17px; border-radius:12px; border:1px solid var(--line);
+          background:#0b1220; color:var(--txt); }
+  input:focus { outline:2px solid var(--amber); border-color:var(--amber); }
+  .btn { width:100%; padding:16px; font-size:17px; font-weight:600; border:none; border-radius:14px;
+         cursor:pointer; margin-top:16px; }
+  .btn-primary { background:var(--amber); color:#1a1206; }
+  .btn-primary:disabled { opacity:.4; }
+  .btn-ghost { background:transparent; color:var(--mut); border:1px solid var(--line); }
+  .btn-big { padding:26px 16px; font-size:20px; }
+  .bar { display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--card);
+         border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+  .bar .plate { font-weight:700; font-variant:tabular-nums; }
+  .bar .status { margin-left:auto; font-size:13px; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+  .sbtn { padding:18px 12px; border-radius:14px; border:1px solid var(--line); background:var(--card);
+          color:var(--txt); font-size:15px; font-weight:600; text-align:left; cursor:pointer; }
+  .sbtn small { display:block; color:var(--mut); font-weight:400; margin-top:3px; }
+  .scan-item { display:flex; align-items:center; gap:10px; padding:11px 12px; background:var(--card);
+               border:1px solid var(--line); border-radius:12px; margin-top:8px; }
+  .scan-item .t { font-variant:tabular-nums; color:var(--mut); font-size:13px; width:44px; }
+  .scan-item .gps { margin-left:auto; font-size:11px; color:var(--mut); font-variant:tabular-nums; }
+  #reader { width:100%; border-radius:14px; overflow:hidden; }
+  .overlay { position:fixed; inset:0; background:#000; z-index:20; display:none; flex-direction:column; padding:16px; }
+  .overlay.active { display:flex; }
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--ok);
+           color:#04120c; padding:12px 18px; border-radius:12px; font-weight:600; z-index:30; opacity:0;
+           transition:opacity .2s; max-width:90%; }
+  .toast.show { opacity:1; }
+  .qrcards { display:grid; gap:20px; }
+  .qrcard { background:#fff; color:#111; padding:16px; border-radius:12px; text-align:center; }
+  .qrcard h3 { margin:0 0 4px; } .qrcard p { margin:0 0 10px; color:#555; }
+  .muted { color:var(--mut); font-size:12px; margin-top:20px; line-height:1.5; }
+</style>
+</head>
+<body>
+
+<!-- 1) Login -->
+<section id="v-login" class="view active">
+  <h1>Fahrten-Tracker</h1>
+  <p class="sub">Anmeldung</p>
+  <label for="pw">Passwort</label>
+  <input id="pw" type="password" autocomplete="current-password" inputmode="text">
+  <button id="loginBtn" class="btn btn-primary">Einloggen</button>
+  <p id="loginErr" class="sub" style="color:var(--warn); display:none;">Falsches Passwort.</p>
+</section>
+
+<!-- 2) Kennzeichen -->
+<section id="v-plate" class="view">
+  <h1>Kennzeichen</h1>
+  <p class="sub">Pflichtfeld – bitte das Kennzeichen dieses LKW eingeben.</p>
+  <label for="plate">Kennzeichen</label>
+  <input id="plate" type="text" autocapitalize="characters" autocomplete="off" placeholder="z. B. MEK-AB 123">
+  <button id="plateBtn" class="btn btn-primary" disabled>Weiter</button>
+</section>
+
+<!-- 3) Haupt -->
+<section id="v-main" class="view">
+  <div class="bar">
+    <span class="plate" id="hPlate">–</span>
+    <span class="status" id="hStatus"></span>
+  </div>
+  <div style="padding:16px; max-width:520px; margin:0 auto;">
+    <button id="scanBtn" class="btn btn-primary btn-big">📷 QR-Code scannen</button>
+    <button id="manualBtn" class="btn btn-ghost">Ohne Kamera erfassen</button>
+    <div id="manualBox" style="display:none;">
+      <div class="grid2" id="stationBtns"></div>
+    </div>
+    <h3 style="margin:22px 0 4px; font-size:15px;">Heute erfasst (<span id="cnt">0</span>)</h3>
+    <div id="scanList"></div>
+    <button id="exportBtn" class="btn btn-ghost" style="margin-top:22px;">💾 Daten sichern (Export)</button>
+    <button id="changePlate" class="btn btn-ghost">Kennzeichen ändern</button>
+    <button id="logoutBtn" class="btn btn-ghost">Abmelden</button>
+    <p class="muted" id="cfgWarn"></p>
+  </div>
+</section>
+
+<!-- Scanner-Overlay -->
+<div id="scanOverlay" class="overlay">
+  <div id="reader"></div>
+  <button id="closeScan" class="btn btn-ghost" style="color:#fff; border-color:#fff;">Abbrechen</button>
+</div>
+
+<!-- QR-Codes zum Drucken (Aufruf: dateiname.html#qr) -->
+<section id="v-qr" class="view">
+  <h1>QR-Codes zum Ausdrucken</h1>
+  <p class="sub">Je Station einmal ausdrucken und vor Ort anbringen. „Boden abkippen" ist EIN Code – Nesselröden vs. Baustelle entscheidet das GPS.</p>
+  <div class="qrcards" id="qrCards"></div>
+</section>
+
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script>
+/* ============================================================
+   KONFIGURATION  – hier trägst du deine Werte ein
+   ============================================================ */
+const CONFIG = {
+  // Privates GitHub-Repo für die Scan-Daten:
+  GITHUB_OWNER : "liviuradu",
+  GITHUB_REPO  : "fahrten-tracker-daten",
+  GITHUB_BRANCH: "main",
+  // Kein Token im Code! Einrichtung pro Gerät über Setup-Link:
+  //   https://liviuradu.github.io/fahrten-tracker/#setup=DEIN_TOKEN
+  SCAN_DIR     : "scans",
+
+  // Passwörter, die ihr den Fahrern gebt (mehrere möglich):
+  PASSWORDS    : ["baustelle2026"],
+
+  // Geofence Nesselröden: entscheidet bei "Boden abkippen" Deponie vs. Baustelle
+  NESSELROEDEN : { lat: 51.3402, lng: 10.0021, radiusMeter: 800 },
+};
+
+/* ============================================================ */
+const STATIONS = {
+  SAND_LADEN  : { label:"Sand laden",     ort:"Röhrda" },
+  SAND_KIPPEN : { label:"Sand abkippen",  ort:"Baustelle" },
+  BODEN_LADEN : { label:"Boden laden",    ort:"Baustelle" },
+  BODEN_KIPPEN: { label:"Boden abkippen", ort:"(GPS entscheidet)" },
+};
+const LABEL = { ...STATIONS,
+  BODEN_NESSEL:{ label:"Boden abkippen", ort:"Nesselröden" },
+  BODEN_INTERN:{ label:"Boden abkippen", ort:"Baustelle · andere Stelle" },
+};
+
+const LS = { scans:"ft_scans", plate:"ft_plate", auth:"ft_auth", token:"ft_token" };
+const getToken = () => localStorage.getItem(LS.token) || "";
+const $ = id => document.getElementById(id);
+const todayStr = () => new Date().toISOString().slice(0,10);
+const uid = () => (crypto?.randomUUID?.() || ("s_"+Date.now().toString(36)+Math.random().toString(36).slice(2,8)));
+const pad = n => String(n).padStart(2,"0");
+const hhmm = iso => { const d=new Date(iso); return pad(d.getHours())+":"+pad(d.getMinutes()); };
+const b64 = s => btoa(unescape(encodeURIComponent(s)));
+
+let scans = [];
+let plate = "";
+let lastPos = null;       // vorgewärmte GPS-Position
+let flushing = false;
+let scanner = null;
+let uploadErr = null;     // null | "auth" (Token/Repo falsch) – Netzfehler zählen nicht
+
+/* ---------- Speicher ---------- */
+function load(){
+  try { scans = JSON.parse(localStorage.getItem(LS.scans) || "[]"); } catch { scans = []; }
+  plate = localStorage.getItem(LS.plate) || "";
+  // Vortagesdaten löschen (nur bereits gesendete – nicht gesendete bleiben zum Nachholen):
+  const before = scans.length;
+  scans = scans.filter(s => s.dateStr === todayStr() || !s.synced);
+  if (scans.length !== before) save();
+}
+function save(){ localStorage.setItem(LS.scans, JSON.stringify(scans)); }
+
+/* ---------- Ansichten ---------- */
+function show(id){ document.querySelectorAll(".view").forEach(v=>v.classList.remove("active")); $(id).classList.add("active"); }
+function route(){
+  // Einmalige Geräte-Einrichtung: Setup-Link speichert den Upload-Zugang lokal
+  if (location.hash.startsWith("#setup=")) {
+    const t = decodeURIComponent(location.hash.slice(7)).trim();
+    if (t) { localStorage.setItem(LS.token, t); uploadErr = null; showToast("Einrichtung gespeichert ✓"); }
+    history.replaceState(null, "", location.pathname);  // Token sofort aus URL entfernen
+  }
+  if (location.hash === "#qr") { renderQR(); return show("v-qr"); }
+  if (localStorage.getItem(LS.auth) !== "1") return show("v-login");
+  if (!plate) return show("v-plate");
+  startMain();
+}
+
+/* ---------- Login ---------- */
+$("loginBtn").onclick = () => {
+  const ok = CONFIG.PASSWORDS.includes($("pw").value.trim());
+  if (!ok) { $("loginErr").style.display="block"; return; }
+  localStorage.setItem(LS.auth,"1"); $("pw").value=""; $("loginErr").style.display="none"; route();
+};
+$("pw").addEventListener("keydown", e => { if (e.key==="Enter") $("loginBtn").click(); });
+
+/* ---------- Kennzeichen ---------- */
+$("plate").addEventListener("input", e => {
+  e.target.value = e.target.value.toUpperCase();
+  $("plateBtn").disabled = e.target.value.trim().length === 0;
+});
+$("plateBtn").onclick = () => {
+  plate = $("plate").value.trim();
+  if (!plate) return;
+  localStorage.setItem(LS.plate, plate); route();
+};
+
+/* ---------- Haupt ---------- */
+function startMain(){
+  $("hPlate").textContent = plate;
+  buildStationButtons();
+  renderList();
+  warmGPS();
+  updateStatus();
+  $("cfgWarn").textContent = getToken() ? "" :
+    "⚠ Gerät noch nicht eingerichtet – bitte den Setup-Link vom Bauleiter öffnen. Scans werden bis dahin nur lokal gespeichert.";
+  show("v-main");
+}
+$("changePlate").onclick = () => { show("v-plate"); $("plate").value = plate; $("plateBtn").disabled = !plate; };
+$("logoutBtn").onclick = () => { localStorage.removeItem(LS.auth); route(); };
+$("manualBtn").onclick = () => { const b=$("manualBox"); b.style.display = b.style.display==="none" ? "block" : "none"; };
+
+function buildStationButtons(){
+  $("stationBtns").innerHTML = "";
+  Object.entries(STATIONS).forEach(([key,s])=>{
+    const b=document.createElement("button"); b.className="sbtn";
+    b.innerHTML = `${s.label}<small>${s.ort}</small>`;
+    b.onclick = () => record(key);
+    $("stationBtns").appendChild(b);
+  });
+}
+
+/* ---------- GPS ---------- */
+function warmGPS(){
+  if (!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(
+    p => lastPos = { lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6) },
+    () => {}, { enableHighAccuracy:true, maximumAge:10000, timeout:15000 }
+  );
+}
+function getGPS(){
+  return new Promise(res=>{
+    if (lastPos) return res(lastPos);           // vorgewärmt → sofort
+    if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(
+      p => res({ lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6) }),
+      () => res(null), { enableHighAccuracy:true, timeout:8000, maximumAge:5000 }
+    );
+  });
+}
+function distM(a,b){ const R=6371000,r=x=>x*Math.PI/180;
+  const dLa=r(b.lat-a.lat), dLo=r(b.lng-a.lng);
+  const s=Math.sin(dLa/2)**2 + Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s)); }
+
+/* ---------- Scan erfassen ---------- */
+async function record(stationKey){
+  const pos = await getGPS();
+  let action = stationKey;
+  if (stationKey === "BODEN_KIPPEN")
+    action = (pos && distM(pos, CONFIG.NESSELROEDEN) <= CONFIG.NESSELROEDEN.radiusMeter) ? "BODEN_NESSEL" : "BODEN_INTERN";
+  const scan = { id:uid(), plate, action, ts:new Date().toISOString(),
+                 lat: pos?.lat ?? null, lng: pos?.lng ?? null, dateStr:todayStr(), synced:false };
+  scans.push(scan); save(); renderList(); updateStatus();
+  showToast("Erfasst: " + LABEL[action].label);
+  flush();  // Hintergrund-Upload, blockiert nichts
+}
+
+function normalizeQR(text){
+  const t = String(text).trim().toUpperCase().replace(/^FT[:\-]/,"");
+  return STATIONS[t] ? t : null;
+}
+
+/* ---------- Kamera ---------- */
+$("scanBtn").onclick = async () => {
+  $("scanOverlay").classList.add("active");
+  try {
+    scanner = new Html5Qrcode("reader");
+    await scanner.start({ facingMode:"environment" }, { fps:10, qrbox:250 },
+      txt => { const k = normalizeQR(txt); if (k){ stopScanner(); record(k);} else showToast("Unbekannter QR-Code"); },
+      () => {});
+  } catch(e){ showToast("Kamera nicht verfügbar – nutze „Ohne Kamera"); stopScanner(); }
+};
+$("closeScan").onclick = stopScanner;
+function stopScanner(){
+  $("scanOverlay").classList.remove("active");
+  if (scanner){ scanner.stop().then(()=>scanner.clear()).catch(()=>{}); scanner=null; }
+}
+
+/* ---------- Upload zu GitHub (Hintergrund) ---------- */
+async function uploadOne(scan){
+  const path = `${CONFIG.SCAN_DIR}/${scan.id}.json`;
+  const url  = `https://api.github.com/repos/${CONFIG.GITHUB_OWNER}/${CONFIG.GITHUB_REPO}/contents/${path}`;
+  const payload = { id:scan.id, plate:scan.plate, action:scan.action, ts:scan.ts, lat:scan.lat, lng:scan.lng };
+  const res = await fetch(url, { method:"PUT",
+    headers:{ "Authorization":`Bearer ${getToken()}`, "Accept":"application/vnd.github+json" },
+    body: JSON.stringify({ message:`scan ${scan.id}`, content:b64(JSON.stringify(payload)), branch:CONFIG.GITHUB_BRANCH })
+  });
+  if (res.ok || res.status === 422){ uploadErr = null; return true; }  // 422 = existiert schon
+  if ([401,403,404].includes(res.status)) uploadErr = "auth";          // Token/Repo falsch → Warnung zeigen
+  return false;
+}
+async function flush(){
+  if (flushing || !navigator.onLine) return;
+  if (!getToken()) return;   // Gerät noch nicht eingerichtet
+  flushing = true;
+  try {
+    for (const s of scans.filter(x=>!x.synced)){
+      try {
+        if (await uploadOne(s)){ s.synced=true; save(); renderList(); }
+        else if (uploadErr === "auth") break;  // Zugang falsch → nicht alle durchprobieren
+      }
+      catch { break; }  // Netzfehler → später erneut
+    }
+  } finally { flushing = false; updateStatus(); }
+}
+window.addEventListener("online", flush);
+document.addEventListener("visibilitychange", () => { if (!document.hidden){ flush(); updateStatus(); } });
+setInterval(flush, 30000);
+
+/* ---------- Anzeige ---------- */
+function renderList(){
+  $("cnt").textContent = scans.length;
+  $("scanList").innerHTML = scans.slice().reverse().map(s=>`
+    <div class="scan-item">
+      <span class="t">${hhmm(s.ts)}</span>
+      <span>${LABEL[s.action].label} · <span style="color:var(--mut)">${LABEL[s.action].ort}</span></span>
+      <span class="gps">${s.lat!=null ? s.lat+", "+s.lng : "kein GPS"}</span>
+      <span title="${s.synced?"gesendet":"lokal gespeichert"}">${s.synced ? "✓" : "⏳"}</span>
+    </div>`).join("") || `<p class="sub">Noch nichts erfasst.</p>`;
+}
+function updateStatus(){
+  const pending = scans.filter(s=>!s.synced).length;
+  const on = navigator.onLine;
+  $("hStatus").innerHTML =
+    `<span class="dot" style="background:${on?'var(--ok)':'var(--warn)'}"></span>${on?'Online':'Kein Netz'}`
+    + (pending ? ` · ⏳ ${pending}` : "");
+  // Schutznetz 2: Upload wird abgelehnt (Token/Repo falsch) → deutlich warnen
+  if (uploadErr === "auth")
+    $("cfgWarn").innerHTML = `<span style="color:var(--warn)">⚠ Upload abgelehnt – GitHub-Zugang prüfen (Token/Repo). Scans bleiben lokal gespeichert; im Zweifel „Daten sichern" nutzen.</span>`;
+}
+window.addEventListener("online", updateStatus);
+window.addEventListener("offline", updateStatus);
+
+function showToast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1800); }
+
+/* ---------- Schutznetz 3: Notfall-Export (Teilen/Download) ---------- */
+$("exportBtn").onclick = async () => {
+  if (!scans.length) return showToast("Keine Daten vorhanden");
+  const data = JSON.stringify(scans.map(s => ({ id:s.id, plate:s.plate, action:s.action, ts:s.ts, lat:s.lat, lng:s.lng, synced:!!s.synced })), null, 1);
+  const name = `scans-${(plate||"lkw").replace(/[^A-Z0-9]/gi,"")}-${todayStr()}.json`;
+  const file = new File([data], name, { type:"application/json" });
+  if (navigator.canShare && navigator.canShare({ files:[file] })) {
+    try { await navigator.share({ files:[file], title:"Fahrten-Scans" }); return; } catch { /* abgebrochen → Download */ }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([data], { type:"application/json" }));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
+  showToast("Export erstellt");
+};
+
+/* ---------- QR-Codes drucken ---------- */
+function renderQR(){
+  const box = $("qrCards"); box.innerHTML="";
+  Object.entries(STATIONS).forEach(([key,s])=>{
+    const c=document.createElement("div"); c.className="qrcard";
+    c.innerHTML=`<h3>${s.label}</h3><p>${s.ort}</p><canvas></canvas>`;
+    box.appendChild(c);
+    QRCode.toCanvas(c.querySelector("canvas"), key, { width:200 });
+  });
+}
+window.addEventListener("hashchange", route);
+
+/* ---------- Start ---------- */
+load(); route(); flush();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
+// Schutznetz 1: Browser bitten, die Daten NICHT automatisch zu löschen (iOS 7-Tage-Regel etc.)
+if (navigator.storage?.persist) navigator.storage.persist().catch(()=>{});
+</script>
+</body>
+</html>
