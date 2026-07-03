@@ -88,7 +88,7 @@
   </div>
   <div style="padding:16px; max-width:520px; margin:0 auto;">
     <button id="scanBtn" class="btn btn-primary btn-big">📷 QR-Code scannen</button>
-    <button id="manualBtn" class="btn btn-ghost">Ohne Kamera erfassen</button>
+    <button id="manualBtn" class="btn btn-ghost" style="display:none">Ohne Kamera erfassen</button>
     <div id="manualBox" style="display:none;">
       <div class="grid2" id="stationBtns"></div>
     </div>
@@ -201,11 +201,11 @@ const STATION_KEYS = ["SAND_LADEN","SAND_KIPPEN","BODEN_LADEN","BODEN_KIPPEN"];
 const stationOf = a => (a === "BODEN_NESSEL" || a === "BODEN_INTERN") ? "BODEN_KIPPEN" : a;
 const stText = a => t("st_" + a);
 function ortText(a){
-  return ({ SAND_LADEN:"Röhrda", SAND_KIPPEN:t("site"), BODEN_LADEN:t("site"),
+  return ({ SAND_LADEN:"Nesselröden", SAND_KIPPEN:t("site"), BODEN_LADEN:t("site"),
             BODEN_KIPPEN:t("gpsDecides"), BODEN_NESSEL:"Nesselröden", BODEN_INTERN:t("siteOther") })[a] || "";
 }
 // QR-Druckseite bewusst nur Deutsch (hängt vor Ort aus):
-const QR_DE = { SAND_LADEN:["Sand laden","Röhrda"], SAND_KIPPEN:["Sand abkippen","Baustelle"],
+const QR_DE = { SAND_LADEN:["Sand laden","Nesselröden"], SAND_KIPPEN:["Sand abkippen","Baustelle"],
                 BODEN_LADEN:["Boden laden","Baustelle"], BODEN_KIPPEN:["Boden abkippen","(GPS entscheidet)"] };
 
 const LS = { scans:"ft_scans", plate:"ft_plate", auth:"ft_auth", token:"ft_token" };
