@@ -41,6 +41,8 @@
                border:1px solid var(--line); border-radius:12px; margin-top:8px; }
   .scan-item .t { font-variant:tabular-nums; color:var(--mut); font-size:13px; width:44px; }
   .scan-item .gps { margin-left:auto; font-size:11px; color:var(--mut); font-variant:tabular-nums; }
+  .scan-item .del { background:none; border:none; font-size:16px; padding:2px 4px; cursor:pointer; }
+  .scan-item.pendingdel { opacity:.45; }
   #reader { width:100%; border-radius:14px; overflow:hidden; }
   .overlay { position:fixed; inset:0; background:#000; z-index:20; display:none; flex-direction:column; padding:16px; }
   .overlay.active { display:flex; }
@@ -191,6 +193,19 @@ sq:{exportBtn:"📄 Lista e ditës (PDF)",colTime:"Ora",colStation:"Stacioni",co
 uk:{exportBtn:"📄 Список дня (PDF)",colTime:"Час",colStation:"Станція",colPlace:"Місце"},
 };
 Object.entries(EXTRA2).forEach(([l,d]) => Object.assign(I18N[l], d));
+const EXTRA3 = {
+de:{gpsDenied:"⚠ Kein Standort-Zugriff. iPhone/Safari: Menü in der Adressleiste („aA“) → Website-Einstellungen → Standort → Erlauben. Danach neu laden.",delConfirm:"Diesen Eintrag wirklich löschen?",delFailed:"Löschen fehlgeschlagen – wird später automatisch erneut versucht"},
+en:{gpsDenied:"⚠ No location access. iPhone/Safari: address-bar menu (aA) → Website Settings → Location → Allow, then reload.",delConfirm:"Really delete this entry?",delFailed:"Delete failed – will retry automatically later"},
+ro:{gpsDenied:"⚠ Fără acces la locație. iPhone/Safari: meniul din bara de adresă (aA) → Setări site → Locație → Permite, apoi reîncarcă.",delConfirm:"Sigur ștergi această înregistrare?",delFailed:"Ștergerea a eșuat – se reîncearcă automat mai târziu"},
+sr:{gpsDenied:"⚠ Nema pristupa lokaciji. iPhone/Safari: meni u traci adrese (aA) → Podešavanja sajta → Lokacija → Dozvoli, pa ponovo učitaj.",delConfirm:"Stvarno obrisati ovaj unos?",delFailed:"Brisanje nije uspelo – pokušaće ponovo automatski"},
+hu:{gpsDenied:"⚠ Nincs helymeghatározás. iPhone/Safari: címsor menü (aA) → Webhelybeállítások → Hely → Engedélyezés, majd újratöltés.",delConfirm:"Biztosan törlöd ezt a bejegyzést?",delFailed:"A törlés nem sikerült – később automatikusan újrapróbálja"},
+pl:{gpsDenied:"⚠ Brak dostępu do lokalizacji. iPhone/Safari: menu paska adresu (aA) → Ustawienia witryny → Lokalizacja → Zezwól, potem odśwież.",delConfirm:"Na pewno usunąć ten wpis?",delFailed:"Usuwanie nie powiodło się – spróbuje ponownie automatycznie"},
+es:{gpsDenied:"⚠ Sin acceso a la ubicación. iPhone/Safari: menú de la barra de direcciones (aA) → Ajustes del sitio → Ubicación → Permitir, luego recarga.",delConfirm:"¿Seguro que quieres borrar esta entrada?",delFailed:"No se pudo borrar – se reintentará automáticamente"},
+it:{gpsDenied:"⚠ Niente accesso alla posizione. iPhone/Safari: menu nella barra degli indirizzi (aA) → Impostazioni sito → Posizione → Consenti, poi ricarica.",delConfirm:"Eliminare davvero questa voce?",delFailed:"Eliminazione non riuscita – riproverà automaticamente"},
+sq:{gpsDenied:"⚠ S'ka qasje te vendndodhja. iPhone/Safari: menyja te shiriti i adresës (aA) → Cilësimet e faqes → Vendndodhja → Lejo, pastaj ringarko.",delConfirm:"Vërtet ta fshij këtë regjistrim?",delFailed:"Fshirja dështoi – do të riprovohet automatikisht"},
+uk:{gpsDenied:"⚠ Немає доступу до геолокації. iPhone/Safari: меню в рядку адреси (aA) → Параметри сайту → Геопозиція → Дозволити, потім перезавантаж.",delConfirm:"Точно видалити цей запис?",delFailed:"Не вдалося видалити – спробує ще раз автоматично"},
+};
+Object.entries(EXTRA3).forEach(([l,d]) => Object.assign(I18N[l], d));
 
 let lang = localStorage.getItem("ft_lang") || (navigator.language || "de").slice(0,2).toLowerCase();
 if (!I18N[lang]) lang = "de";
@@ -223,6 +238,7 @@ let lastPos = null;
 let flushing = false;
 let scanner = null;
 let uploadErr = null;     // null | "auth"
+let gpsErr = null;        // Geolocation-Fehler: 1 = verweigert, 2 = kein Signal, 3 = Timeout
 let undoTimer = null;
 
 /* ---------- Speicher ---------- */
@@ -326,17 +342,27 @@ function buildStationButtons(){
 function warmGPS(){
   if (!navigator.geolocation) return;
   navigator.geolocation.watchPosition(
-    p => lastPos = { lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6) },
-    () => {}, { enableHighAccuracy:true, maximumAge:10000, timeout:15000 }
+    p => { lastPos = { lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6) }; gpsErr = null; updateStatus(); },
+    e => { gpsErr = e.code; updateStatus(); }, { enableHighAccuracy:true, maximumAge:10000, timeout:15000 }
   );
 }
+/* iOS/Safari zeigt den Standort-Dialog zuverlässig nur innerhalb einer echten
+   Nutzergeste – deshalb bei jedem Tipp direkt anfragen, bis eine Position da ist. */
+function gpsKick(){
+  if (!navigator.geolocation || lastPos) return;
+  navigator.geolocation.getCurrentPosition(
+    p => { lastPos = { lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6) }; gpsErr = null; updateStatus(); },
+    e => { gpsErr = e.code; updateStatus(); },
+    { enableHighAccuracy:true, timeout:12000, maximumAge:10000 });
+}
+document.addEventListener("click", gpsKick);
 function getGPS(){
   return new Promise(res=>{
     if (lastPos) return res(lastPos);
     if (!navigator.geolocation) return res(null);
     navigator.geolocation.getCurrentPosition(
       p => res({ lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6) }),
-      () => res(null), { enableHighAccuracy:true, timeout:8000, maximumAge:5000 }
+      e => { gpsErr = e.code; updateStatus(); res(null); }, { enableHighAccuracy:true, timeout:8000, maximumAge:5000 }
     );
   });
 }
@@ -388,6 +414,40 @@ function showUndo(id){
 }
 function hideUndo(){ $("undoBar").style.display = "none"; clearTimeout(undoTimer); flush(); }
 
+/* ---------- Falsch-Erfassung löschen (Papierkorb in der Liste) ---------- */
+function ghHeaders(){ return { "Authorization": "Bearer " + getToken(), "Accept": "application/vnd.github+json" }; }
+async function deleteRemote(s){
+  try {
+    const url = "https://api.github.com/repos/" + CONFIG.GITHUB_OWNER + "/" + CONFIG.GITHUB_REPO +
+                "/contents/" + CONFIG.SCAN_DIR + "/" + s.id + ".json";
+    const g = await fetch(url + "?ref=" + CONFIG.GITHUB_BRANCH, { headers: ghHeaders() });
+    if (g.status === 404) return true;               // schon weg (z. B. bereits im Bericht verarbeitet)
+    if (!g.ok) return false;
+    const sha = (await g.json()).sha;
+    const d = await fetch(url, { method:"DELETE", headers: ghHeaders(),
+      body: JSON.stringify({ message:"delete " + s.id, sha, branch:CONFIG.GITHUB_BRANCH }) });
+    return d.ok;
+  } catch { return false; }
+}
+async function deleteScan(id){
+  const i = scans.findIndex(s => s.id === id);
+  if (i < 0) return;
+  if (!confirm(t("delConfirm"))) return;
+  const s = scans[i];
+  if (!s.synced){ scans.splice(i,1); save(); renderList(); updateStatus(); showToast(t("undoneToast")); return; }
+  if (navigator.onLine && getToken() && await deleteRemote(s)){
+    const j = scans.findIndex(x => x.id === id);
+    if (j >= 0) scans.splice(j,1);
+    save(); renderList(); updateStatus(); showToast(t("undoneToast"));
+  } else {
+    s.delPending = true; save(); renderList(); updateStatus(); showToast(t("delFailed"));
+  }
+}
+$("scanList").addEventListener("click", e => {
+  const b = e.target.closest(".del");
+  if (b) deleteScan(b.getAttribute("data-id"));
+});
+
 function normalizeQR(text){
   const s = String(text).trim().toUpperCase().replace(/^FT[:\-]/,"");
   return STATION_KEYS.includes(s) ? s : null;
@@ -427,7 +487,15 @@ async function flush(){
   if (!getToken()) return;
   flushing = true;
   try {
-    for (const s of scans.filter(x => !x.synced && !(x.hold && x.hold > Date.now()))){
+    // ausstehende Löschungen zuerst nachholen:
+    for (const s of scans.filter(x => x.delPending)){
+      if (await deleteRemote(s)){
+        const i = scans.findIndex(y => y.id === s.id);
+        if (i >= 0) scans.splice(i,1);
+        save(); renderList();
+      }
+    }
+    for (const s of scans.filter(x => !x.synced && !x.delPending && !(x.hold && x.hold > Date.now()))){
       try {
         if (await uploadOne(s)){ s.synced=true; save(); renderList(); }
         else if (uploadErr === "auth") break;
@@ -444,11 +512,12 @@ setInterval(flush, 30000);
 function renderList(){
   $("cnt").textContent = scans.length;
   $("scanList").innerHTML = scans.slice().reverse().map(s=>`
-    <div class="scan-item">
+    <div class="scan-item${s.delPending ? " pendingdel" : ""}">
       <span class="t">${hhmm(s.ts)}</span>
       <span>${stText(s.action)} · <span style="color:var(--mut)">${ortText(s.action)}</span></span>
       <span class="gps">${s.lat!=null ? s.lat+", "+s.lng : t("gpsMissing")}</span>
       <span>${s.synced ? "✓" : "⏳"}</span>
+      <button class="del" data-id="${s.id}">🗑</button>
     </div>`).join("") || `<p class="sub">${t("nothingYet")}</p>`;
 }
 function updateStatus(){
@@ -456,11 +525,16 @@ function updateStatus(){
   const on = navigator.onLine;
   $("hStatus").innerHTML =
     `<span class="dot" style="background:${on?'var(--ok)':'var(--warn)'}"></span>${on?t("online"):t("offline")}`
-    + (pending ? ` · ⏳ ${pending}` : "");
+    + (pending ? ` · ⏳ ${pending}` : "")
+    + ` · <span style="color:${lastPos ? "var(--ok)" : (gpsErr ? "var(--warn)" : "var(--mut)")}">🛰${lastPos ? "✓" : (gpsErr ? "✗" : "…")}</span>`;
   if (uploadErr === "auth")
     $("cfgWarn").innerHTML = `<span style="color:var(--warn)">${t("uploadRejected")}</span>`;
+  else if (!getToken())
+    $("cfgWarn").textContent = t("notSetup");
+  else if (gpsErr === 1 && !lastPos)
+    $("cfgWarn").innerHTML = `<span style="color:var(--amber)">${t("gpsDenied")}</span>`;
   else
-    $("cfgWarn").textContent = getToken() ? "" : t("notSetup");
+    $("cfgWarn").textContent = "";
 }
 window.addEventListener("online", updateStatus);
 window.addEventListener("offline", updateStatus);
@@ -511,14 +585,22 @@ $("sendBtn").onclick = async () => {
 $("testBtn").onclick = async () => {
   $("testMsg").textContent = "…";
   if (!getToken()) { $("testMsg").textContent = "Kein Zugang eingerichtet – Setup-Link zuerst öffnen."; return; }
+  const base = "https://api.github.com/repos/" + CONFIG.GITHUB_OWNER + "/" + CONFIG.GITHUB_REPO;
   try {
-    const res = await fetch(`https://api.github.com/repos/${CONFIG.GITHUB_OWNER}/${CONFIG.GITHUB_REPO}/actions/workflows/tagesbericht.yml/dispatches`, {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${getToken()}`, "Accept": "application/vnd.github+json" },
+    // Erst prüfen, ob überhaupt Scans da sind – ohne Daten gäbe es keine E-Mail:
+    let n = 0;
+    const lr = await fetch(base + "/contents/" + CONFIG.SCAN_DIR + "?ref=" + CONFIG.GITHUB_BRANCH, { headers: ghHeaders() });
+    if (lr.ok) n = (await lr.json()).filter(f => f.name.endsWith(".json")).length;
+    if (n === 0) {
+      $("testMsg").textContent = "Keine Scans in der Datenbank – es würde keine E-Mail erstellt. Zuerst am Handy scannen und „Jetzt senden» drücken. / Nu există scanări în baza de date – întâi scanează pe telefon și apasă „Trimite acum», apoi declanșează aici.";
+      return;
+    }
+    const res = await fetch(base + "/actions/workflows/tagesbericht.yml/dispatches", {
+      method: "POST", headers: ghHeaders(),
       body: JSON.stringify({ ref: CONFIG.GITHUB_BRANCH })
     });
     $("testMsg").textContent = res.status === 204
-      ? "✓ Bericht wird erstellt – E-Mail kommt in 1–2 Minuten (SMTP-Secrets müssen eingerichtet sein). / Mailul vine în 1–2 minute."
+      ? "✓ Bericht mit " + n + " Scans wird erstellt – die E-Mail an die eingestellten Empfänger kommt in 1–2 Minuten. / Mailul cu " + n + " scanări vine în 1–2 minute."
       : "Fehler " + res.status + " – Token braucht zusätzlich das Recht Actions: Read and write.";
   } catch(e) { $("testMsg").textContent = "Netzwerkfehler: " + e.message; }
 };
