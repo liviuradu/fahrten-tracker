@@ -377,12 +377,15 @@ document.addEventListener("click", gpsKick);
 $("gpsTestBtn").onclick = () => {
   $("gpsTestMsg").textContent = t("gpsTesting");
   if (!navigator.geolocation){ $("gpsTestMsg").textContent = t("gpsUnsupported"); return; }
+  const zeigOk = (lat, lng, acc) => { $("gpsTestMsg").innerHTML = "<span style=\"color:var(--ok)\">✔ " + t("gpsOk") + " " + lat + ", " + lng + (acc != null ? " (±" + Math.round(acc) + " m)" : "") + "</span>"; };
   navigator.geolocation.getCurrentPosition(
-    p => { lastPos = { lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6) }; gpsErr = null; updateStatus();
-      $("gpsTestMsg").innerHTML = "<span style=\"color:var(--ok)\">✔ " + t("gpsOk") + " " + lastPos.lat + ", " + lastPos.lng + " (±" + Math.round(p.coords.accuracy) + " m)</span>"; },
+    p => { lastPos = { lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6) }; gpsErr = null; updateStatus(); zeigOk(lastPos.lat, lastPos.lng, p.coords.accuracy); },
     e => { gpsErr = e.code; updateStatus();
+      // Berechtigung vorhanden, nur gerade kein frischer Fix (z. B. im Gebäude):
+      // dann zählt die letzte bekannte Position als Erfolg statt Fehlermeldung.
+      if (e.code !== 1 && lastPos) { gpsErr = null; updateStatus(); zeigOk(lastPos.lat, lastPos.lng, null); return; }
       $("gpsTestMsg").innerHTML = "<span style=\"color:var(--warn)\">✖ " + (e.code === 1 ? t("gpsDenied") : e.code === 2 ? t("gpsUnavail") : t("gpsTimeout")) + "</span>"; },
-    { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+    { enableHighAccuracy:true, timeout:15000, maximumAge:20000 });
 };
 function getGPS(){
   return new Promise(res=>{
