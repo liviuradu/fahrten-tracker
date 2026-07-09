@@ -94,6 +94,8 @@
     <div id="manualBox" style="display:none;">
       <div class="grid2" id="stationBtns"></div>
     </div>
+    <button id="gpsTestBtn" class="btn btn-ghost">🛰 GPS testen</button>
+    <p class="muted" id="gpsTestMsg" style="margin-top:6px;"></p>
     <h3 style="margin:22px 0 4px; font-size:15px;"><span id="t_todayHdr">Heute erfasst</span> (<span id="cnt">0</span>)</h3>
     <div id="scanList"></div>
     <button id="sendBtn" class="btn btn-primary" style="margin-top:22px;">📤 Jetzt senden</button>
@@ -206,6 +208,19 @@ sq:{gpsDenied:"⚠ S'ka qasje te vendndodhja. iPhone/Safari: menyja te shiriti i
 uk:{gpsDenied:"⚠ Немає доступу до геолокації. iPhone/Safari: меню в рядку адреси (aA) → Параметри сайту → Геопозиція → Дозволити, потім перезавантаж.",delConfirm:"Точно видалити цей запис?",delFailed:"Не вдалося видалити – спробує ще раз автоматично"},
 };
 Object.entries(EXTRA3).forEach(([l,d]) => Object.assign(I18N[l], d));
+const EXTRA4 = {
+de:{gpsTestBtn:"🛰 GPS testen",gpsTesting:"GPS wird abgefragt…",gpsOk:"Standort gefunden:",gpsUnavail:"Kein GPS-Signal – Position derzeit nicht verfügbar",gpsTimeout:"Zeitüberschreitung – kein GPS-Signal",gpsUnsupported:"Dieses Gerät/dieser Browser unterstützt kein GPS"},
+en:{gpsTestBtn:"🛰 Test GPS",gpsTesting:"Requesting GPS…",gpsOk:"Location found:",gpsUnavail:"No GPS signal – position unavailable",gpsTimeout:"Timeout – no GPS signal",gpsUnsupported:"This device/browser has no GPS support"},
+ro:{gpsTestBtn:"🛰 Testează GPS",gpsTesting:"Se interoghează GPS-ul…",gpsOk:"Locație găsită:",gpsUnavail:"Fără semnal GPS – poziția nu e disponibilă",gpsTimeout:"Timp depășit – fără semnal GPS",gpsUnsupported:"Dispozitivul/browserul nu are GPS"},
+sr:{gpsTestBtn:"🛰 Testiraj GPS",gpsTesting:"GPS se proverava…",gpsOk:"Lokacija pronađena:",gpsUnavail:"Nema GPS signala – pozicija nedostupna",gpsTimeout:"Isteklo vreme – nema GPS signala",gpsUnsupported:"Uređaj/pregledač nema GPS"},
+hu:{gpsTestBtn:"🛰 GPS teszt",gpsTesting:"GPS lekérdezése…",gpsOk:"Helyzet megtalálva:",gpsUnavail:"Nincs GPS-jel – a pozíció nem érhető el",gpsTimeout:"Időtúllépés – nincs GPS-jel",gpsUnsupported:"Az eszköz/böngésző nem támogatja a GPS-t"},
+pl:{gpsTestBtn:"🛰 Test GPS",gpsTesting:"Odpytywanie GPS…",gpsOk:"Znaleziono lokalizację:",gpsUnavail:"Brak sygnału GPS – pozycja niedostępna",gpsTimeout:"Przekroczono czas – brak sygnału GPS",gpsUnsupported:"Urządzenie/przeglądarka nie obsługuje GPS"},
+es:{gpsTestBtn:"🛰 Probar GPS",gpsTesting:"Consultando GPS…",gpsOk:"Ubicación encontrada:",gpsUnavail:"Sin señal GPS – posición no disponible",gpsTimeout:"Tiempo agotado – sin señal GPS",gpsUnsupported:"El dispositivo/navegador no admite GPS"},
+it:{gpsTestBtn:"🛰 Test GPS",gpsTesting:"Richiesta GPS…",gpsOk:"Posizione trovata:",gpsUnavail:"Nessun segnale GPS – posizione non disponibile",gpsTimeout:"Tempo scaduto – nessun segnale GPS",gpsUnsupported:"Il dispositivo/browser non supporta il GPS"},
+sq:{gpsTestBtn:"🛰 Testo GPS",gpsTesting:"Po kërkohet GPS…",gpsOk:"Vendndodhja u gjet:",gpsUnavail:"S'ka sinjal GPS – pozicioni s'është i disponueshëm",gpsTimeout:"Koha kaloi – s'ka sinjal GPS",gpsUnsupported:"Pajisja/shfletuesi s'ka GPS"},
+uk:{gpsTestBtn:"🛰 Тест GPS",gpsTesting:"Запит GPS…",gpsOk:"Локацію знайдено:",gpsUnavail:"Немає сигналу GPS – позиція недоступна",gpsTimeout:"Тайм-аут – немає сигналу GPS",gpsUnsupported:"Пристрій/браузер не підтримує GPS"},
+};
+Object.entries(EXTRA4).forEach(([l,d]) => Object.assign(I18N[l], d));
 
 let lang = localStorage.getItem("ft_lang") || (navigator.language || "de").slice(0,2).toLowerCase();
 if (!I18N[lang]) lang = "de";
@@ -274,6 +289,7 @@ function applyTexts(){
   $("manualBtn").textContent = t("manualBtn");
   $("t_todayHdr").textContent = t("todayHdr");
   $("sendBtn").textContent = t("sendBtn");
+  $("gpsTestBtn").textContent = t("gpsTestBtn");
   $("exportBtn").textContent = t("exportBtn");
   $("changePlate").textContent = t("changePlateBtn");
   $("logoutBtn").textContent = t("logoutBtn");
@@ -356,6 +372,18 @@ function gpsKick(){
     { enableHighAccuracy:true, timeout:12000, maximumAge:10000 });
 }
 document.addEventListener("click", gpsKick);
+/* „GPS testen“: erzwingt eine frische Abfrage (maximumAge:0) und zeigt Ergebnis
+   oder den genauen Fehler samt Anleitung. Läuft direkt in der Nutzergeste. */
+$("gpsTestBtn").onclick = () => {
+  $("gpsTestMsg").textContent = t("gpsTesting");
+  if (!navigator.geolocation){ $("gpsTestMsg").textContent = t("gpsUnsupported"); return; }
+  navigator.geolocation.getCurrentPosition(
+    p => { lastPos = { lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6) }; gpsErr = null; updateStatus();
+      $("gpsTestMsg").innerHTML = "<span style=\"color:var(--ok)\">✔ " + t("gpsOk") + " " + lastPos.lat + ", " + lastPos.lng + " (±" + Math.round(p.coords.accuracy) + " m)</span>"; },
+    e => { gpsErr = e.code; updateStatus();
+      $("gpsTestMsg").innerHTML = "<span style=\"color:var(--warn)\">✖ " + (e.code === 1 ? t("gpsDenied") : e.code === 2 ? t("gpsUnavail") : t("gpsTimeout")) + "</span>"; },
+    { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+};
 function getGPS(){
   return new Promise(res=>{
     if (lastPos) return res(lastPos);
@@ -510,8 +538,9 @@ setInterval(flush, 30000);
 
 /* ---------- Anzeige ---------- */
 function renderList(){
-  $("cnt").textContent = scans.length;
-  $("scanList").innerHTML = scans.slice().reverse().map(s=>`
+  const own = scans.filter(s => s.plate === plate);   // nur Touren des aktuellen Kennzeichens anzeigen
+  $("cnt").textContent = own.length;
+  $("scanList").innerHTML = own.slice().reverse().map(s=>`
     <div class="scan-item${s.delPending ? " pendingdel" : ""}">
       <span class="t">${hhmm(s.ts)}</span>
       <span>${stText(s.action)} · <span style="color:var(--mut)">${ortText(s.action)}</span></span>
@@ -543,8 +572,9 @@ function showToast(msg){ const el=$("toast"); el.textContent=msg; el.classList.a
 
 /* ---------- Tagesliste als PDF (Druckansicht) ---------- */
 $("exportBtn").onclick = () => {
-  if (!scans.length) return showToast(t("noData"));
-  const rows = scans.map(s => `<tr><td>${hhmm(s.ts)}</td><td>${stText(s.action)}</td><td>${ortText(s.action)}</td><td>${s.lat!=null ? s.lat+", "+s.lng : t("gpsMissing")}</td><td style="text-align:center">${s.synced ? "✓" : "⏳"}</td></tr>`).join("");
+  const own = scans.filter(s => s.plate === plate);
+  if (!own.length) return showToast(t("noData"));
+  const rows = own.map(s => `<tr><td>${hhmm(s.ts)}</td><td>${stText(s.action)}</td><td>${ortText(s.action)}</td><td>${s.lat!=null ? s.lat+", "+s.lng : t("gpsMissing")}</td><td style="text-align:center">${s.synced ? "✓" : "⏳"}</td></tr>`).join("");
   const win = window.open("", "_blank");
   if (!win) return showToast("Popup blockiert");
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fahrten ${todayStr()} ${plate}</title><style>
@@ -561,7 +591,7 @@ $("exportBtn").onclick = () => {
   </style></head><body>
     <div class="kopf"><div><b>ARGE</b><br><small>Tiefbau SuedLink Los 3 · Fahrten-Tracker</small></div>
     <div style="text-align:right"><b>${plate}</b><br><small>${new Date().toLocaleDateString("de-DE")}</small></div></div>
-    <h2>${t("todayHdr")}: ${scans.length}</h2>
+    <h2>${t("todayHdr")}: ${own.length}</h2>
     <table><tr><th>${t("colTime")}</th><th>${t("colStation")}</th><th>${t("colPlace")}</th><th>GPS</th><th>✓</th></tr>${rows}</table>
     <div class="fuss">✓ = ${t("sendDone")} · ⏳ = ${t("sendSome")}… · HABAU INFRA · Bickhardt bau · PPS · HABAU</div>
     <button class="noprint" onclick="print()">🖨 PDF</button>
